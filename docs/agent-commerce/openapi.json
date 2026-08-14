@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Qzenta Website Security Snapshot",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Fetches a URL and returns a structured, non-invasive security snapshot: HTTP status, redirect chain, HTTPS usage, common security headers, and basic technology observations. Testnet only — payment settles in test USDC on base-sepolia, no real funds.",
     "contact": {
       "name": "Qzenta (Pty) Ltd",
@@ -20,6 +20,15 @@
       "description": "Local development."
     }
   ],
+  "components": {
+    "securitySchemes": {
+      "x402Payment": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "x402 Payment Required. Return HTTP 402 with payment instructions in the response body (x402 v1 format). Client pays and retries with X-PAYMENT header."
+      }
+    }
+  },
   "paths": {
     "/": {
       "get": {
@@ -63,6 +72,7 @@
         "operationId": "runSecuritySnapshot",
         "summary": "Run a website security snapshot (paid)",
         "description": "Fetches the target URL and returns HTTP status, redirect chain, HTTPS validity, security headers, and basic tech fingerprinting. Requires x402 payment.",
+        "security": [{ "x402Payment": [] }],
         "parameters": [
           {
             "name": "url",
@@ -73,6 +83,7 @@
           }
         ],
         "x-payment-info": {
+          "protocols": ["x402"],
           "accepts": [
             {
               "scheme": "exact",
