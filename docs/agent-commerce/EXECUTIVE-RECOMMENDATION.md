@@ -36,14 +36,14 @@ From the ranked-20 research (full table in market research Section E): (1) bundl
 **10. Which single service should become our first commercial product?**
 The bundled **Site Health Passport** (Qzenta side). It extends already-working code rather than starting fresh, and targets the one demonstrated real pattern in the ecosystem — aggregation outperforms atomic lookups by every volume signal found. This is a recommendation, not a decision — see approval requests below.
 
-**11. What should it cost?**
-Start in the same $0.001–$0.01 range as the existing POC and the bulk of the comparable market (most listings found cluster there), with room to test higher (one comparable — an SEO audit bundle — is priced at $5.00 and still listed, suggesting bundled/higher-value services can support above-floor pricing). Section 19's pricing-experiment design (test across $0.001–$1.00, track contribution margin) should run after launch, not be guessed upfront.
+**11. What should it cost? [UPDATED 14 Aug 2026 — supersedes the original answer]**
+**Not $0.001, the current POC price — that price is now known to be unprofitable at any volume, not just untested.** Coinbase's x402 facilitator began charging $0.001/settled payment (after 1,000 free/month) as of 1 Jan 2026 — exactly equal to the current service price, meaning the facilitator fee alone consumes the entire revenue before any Workers cost. See [COST-MODEL.md](./COST-MODEL.md) for the full numbers. Recommend re-pricing to at least $0.005/call, which brings the facilitator fee down to ~10–20% of revenue instead of ~100%. Section 19's pricing experiment should validate the range *above* this facilitator-fee floor, not re-test whether $0.001 works.
 
 **12. What would it cost us to deliver one transaction?**
-Not modeled with real numbers yet — no production Cloudflare Workers billing data exists for this service, and DNS-over-HTTPS/TLS-check additions aren't built. This is a gap: before setting a real price, get actual Workers request-cost and any third-party API costs (if DoH lookups or similar are added) into a per-request cost model. Flagging as unresolved rather than guessing.
+**Modeled, with real published pricing** (see [COST-MODEL.md](./COST-MODEL.md)): Cloudflare Workers costs are near-negligible at this service's volume/compute profile (subrequests aren't billed at all; CPU time is a rounding error against the included pool). The dominant, non-negligible cost is the x402 facilitator's $0.001/settlement fee past the free 1,000/month — at the current $0.001 price this is a 1:1 cost-to-revenue ratio, i.e. zero gross margin before even counting the $5/month Workers Paid-plan fixed cost.
 
 **13. Expected contribution margin at 1,000/10,000/100,000 requests?**
-Not modeled — depends on #12. Do not treat any number here as reliable without the cost model first.
+**Modeled** — at the current $0.001 price: **−400%, −40%, and −4%** respectively (losses shrink as a percentage as the fixed $5/month Workers cost amortizes, but stay negative at every volume tested). At a corrected $0.01/call price, 100,000 requests/month would produce roughly **$896 contribution margin (~90%)**. Full table in [COST-MODEL.md](./COST-MODEL.md).
 
 **14. How will an external agent discover it?**
 Per the discovery architecture: OpenAPI spec → x402scan/402 Index registration → MCP `paidTool` listing. No SEO-driven path — agentic discovery and SEO are explicitly different tracks (discoverability strategy).

@@ -21,14 +21,14 @@
 
 ## API
 
-- **Rate limiting** — not yet implemented. Cloudflare's own rate-limiting rules (WAF/Rate Limiting Rules product) are the natural fit given the existing Cloudflare-only infra stack; scope this before any public staging deployment.
-- **Abuse prevention** — tied to rate limiting; also relevant is that x402 payment itself is a natural abuse deterrent (a spam request costs the attacker money), but the free `GET /` discovery endpoint has no such protection and should have basic rate limiting regardless.
-- **Request size limits** — not yet implemented; low risk for the current GET-with-query-param shape, but worth adding before any endpoint accepts a request body.
+- **Rate limiting** — **done (14 Aug 2026).** Cloudflare's native Workers Rate Limiting binding (`ratelimits` in `wrangler.jsonc`, not the zone-level WAF product — there's no zone yet, nothing is deployed publicly). Two IP-keyed limiters: `DISCOVERY_RATE_LIMITER` (30 req/60s) on `GET /`, `SNAPSHOT_RATE_LIMITER` (20 req/60s) on `/snapshot/*`. Verified locally: 30 requests succeed, the 31st+ return 429, confirmed via `wrangler dev`. Revisit the exact numbers once there's real traffic data — these are reasonable defaults, not measured ones. Once a real zone/custom domain exists, layer Cloudflare's zone-level Rate Limiting Rules on top as defense in depth, per the existing infra convention.
+- **Abuse prevention** — the rate limiter above is the concrete implementation of this. x402 payment itself remains a natural secondary deterrent for `/snapshot/*` (a spam request that gets past the limiter still costs the attacker money once it clears the 402 challenge).
+- **Request size limits** — still not implemented; low risk for the current GET-with-query-param shape, revisit before any endpoint accepts a request body.
 - **Timeouts** — **done.** `fetchWithTimeout` (8s) implemented in Phase 1, covers the outbound scan request.
 - **SSRF protection** — **done.** Phase 1's `ssrf-guard.ts`: blocks RFC1918/loopback/link-local/cloud-metadata ranges and localhost, resolves real hostnames via DNS-over-HTTPS before fetching.
 - **Redirect validation** — **done.** Every redirect hop is re-checked against the SSRF guard, not just the initial URL.
 - **DNS rebinding protection** — **done.** The DoH-based hostname check resolves and validates on every request rather than trusting a cached/assumed IP, which is the standard rebinding mitigation for this shape of service.
-- **Logging, observability** — not yet implemented beyond Cloudflare's default Worker logs. Ties to Section 25's dashboard — deferred until there's a public deployment worth observing.
+- **Logging, observability** — **basic version done (14 Aug 2026).** One structured JSON log line per request (`timestamp`, `method`, `path`, `status`, `latencyMs`, `ip`, `cfRay`) via `console.log`, registered ahead of rate limiting and payment middleware so it captures rejected requests too — Cloudflare captures this via `wrangler tail`/Logpush without a separate service. This is request-level logging only, not the full funnel/revenue dashboard in Section 25 — that remains deferred until there's a public deployment worth observing.
 
 ## Infrastructure
 

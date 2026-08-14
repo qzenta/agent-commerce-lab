@@ -14,5 +14,20 @@
     // (Fixed 2026-08-14: original placeholder was 1 byte short of a valid
     // 20-byte address and failed viem's EIP-55 checksum validation.)
     "X402_PAY_TO": "0x000000000000000000000000000000000000dEaD"
-  }
+  },
+  "ratelimits": [
+    {
+      // Free discovery endpoint — generous, but not unlimited.
+      "name": "DISCOVERY_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 30, "period": 60 }
+    },
+    {
+      // /snapshot/* pre-payment 402 check — a spam request costs nothing
+      // until payment clears, so this is tighter than the free endpoint.
+      "name": "SNAPSHOT_RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ]
 }

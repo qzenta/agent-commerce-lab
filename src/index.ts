@@ -1,13 +1,55 @@
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { paymentMiddleware } from "x402-hono";
 import { runSecuritySnapshot } from "./snapshot";
 
 type Bindings = {
   X402_NETWORK: "base-sepolia" | "base";
   X402_PAY_TO: `0x${string}`;
+  DISCOVERY_RATE_LIMITER: RateLimit;
+  SNAPSHOT_RATE_LIMITER: RateLimit;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
+
+// Structured request logging — one JSON line per request via console.log,
+// which Cloudflare captures in `wrangler tail` / Logpush without needing a
+// separate observability service. Registered first so it also captures
+// requests the rate limiter or payment middleware reject.
+app.use("*", async (c, next) => {
+  const start = Date.now();
+  await next();
+  console.log(
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      method: c.req.method,
+      path: c.req.path,
+      status: c.res.status,
+      latencyMs: Date.now() - start,
+      ip: c.req.header("CF-Connecting-IP") ?? "unknown",
+      cfRay: c.req.header("CF-Ray") ?? null,
+    })
+  );
+});
+
+// Payment settles per call, so /snapshot/* is naturally cost-gated once a
+// request clears the 402 challenge — but the pre-payment 402 check itself
+// (and the free discovery endpoint) can be hit for free, so both get an
+// IP-keyed rate limit ahead of any other logic.
+function rateLimitByIp(
+  getLimiter: (env: Bindings) => RateLimit
+): MiddlewareHandler<{ Bindings: Bindings }> {
+  return async (c, next) => {
+    const ip = c.req.header("CF-Connecting-IP") ?? "unknown";
+    const { success } = await getLimiter(c.env).limit({ key: ip });
+    if (!success) {
+      return c.json({ error: "rate limit exceeded, try again shortly" }, 429);
+    }
+    return next();
+  };
+}
+
+app.use("/", rateLimitByIp((env) => env.DISCOVERY_RATE_LIMITER));
+app.use("/snapshot/*", rateLimitByIp((env) => env.SNAPSHOT_RATE_LIMITER));
 
 // Unpaid: service description for agent discovery. Lets an agent (or a
 // human) see what this endpoint does and what it costs before paying.
