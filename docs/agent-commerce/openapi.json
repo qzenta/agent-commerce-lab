@@ -1,0 +1,172 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Qzenta Website Security Snapshot",
+    "version": "0.1.0",
+    "description": "Fetches a URL and returns a structured, non-invasive security snapshot: HTTP status, redirect chain, HTTPS usage, common security headers, and basic technology observations. Testnet only — payment settles in test USDC on base-sepolia, no real funds.",
+    "contact": {
+      "name": "Qzenta (Pty) Ltd",
+      "url": "https://qzenta.com",
+      "email": "info@qzenta.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8787",
+      "description": "Local development only — this service is not deployed publicly. No production server exists yet."
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "discoverService",
+        "summary": "Free service discovery endpoint",
+        "description": "Lets an agent (or a human) see what this endpoint does and what it costs before paying. No payment required.",
+        "responses": {
+          "200": {
+            "description": "Service description",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": { "type": "string" },
+                    "description": { "type": "string" },
+                    "endpoint": { "type": "string" },
+                    "price": { "type": "string" },
+                    "network": { "type": "string", "enum": ["base-sepolia", "base"] },
+                    "status": { "type": "string" },
+                    "provider": { "type": "string" }
+                  }
+                },
+                "example": {
+                  "service": "Qzenta Website Security Snapshot",
+                  "description": "Fetches a URL and returns a structured, non-invasive security snapshot: HTTP status, redirect chain, HTTPS usage, common security headers, and basic technology observations.",
+                  "endpoint": "GET /snapshot/run?url=<target>",
+                  "price": "$0.001 test USDC (base-sepolia — no real funds)",
+                  "network": "base-sepolia",
+                  "status": "proof-of-concept — not for production traffic",
+                  "provider": "Qzenta (Pty) Ltd — https://qzenta.com"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/snapshot/run": {
+      "get": {
+        "operationId": "runSecuritySnapshot",
+        "summary": "Run a website security snapshot (paid)",
+        "description": "Fetches the target URL and returns HTTP status, redirect chain, HTTPS validity, security headers, and basic tech fingerprinting. Requires x402 payment.",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "required": true,
+            "description": "The http(s) URL to scan. Rejected if it resolves to a private/internal address (SSRF guard).",
+            "schema": { "type": "string", "format": "uri" }
+          }
+        ],
+        "x-payment-info": {
+          "accepts": [
+            {
+              "scheme": "exact",
+              "network": "base-sepolia",
+              "maxAmountRequired": "1000",
+              "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+              "assetName": "USDC",
+              "payTo": "0x000000000000000000000000000000000000dEaD",
+              "description": "One website security snapshot",
+              "maxTimeoutSeconds": 300,
+              "note": "payTo is currently a burn-address placeholder — this service is not accepting real payment. See wrangler.jsonc."
+            }
+          ]
+        },
+        "responses": {
+          "402": {
+            "description": "Payment required — no valid X-PAYMENT header was supplied. Response body matches the x402 v1 challenge shape.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "accepts": { "type": "array", "items": { "type": "object" } },
+                    "x402Version": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Security snapshot result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "target": { "type": "string" },
+                    "timestamp": { "type": "string", "format": "date-time" },
+                    "http": {
+                      "type": "object",
+                      "properties": {
+                        "status": { "type": ["integer", "null"] },
+                        "ok": { "type": "boolean" },
+                        "redirectChain": { "type": "array", "items": { "type": "string" } },
+                        "finalUrl": { "type": ["string", "null"] },
+                        "error": { "type": ["string", "null"] }
+                      }
+                    },
+                    "tls": {
+                      "type": "object",
+                      "properties": {
+                        "usedHttps": { "type": "boolean" },
+                        "protocol": { "type": ["string", "null"] }
+                      }
+                    },
+                    "dns": {
+                      "type": "object",
+                      "description": "Not yet implemented — Workers' fetch() does not expose raw DNS records. See README known-gaps section.",
+                      "properties": {
+                        "hasA": { "type": ["boolean", "null"] },
+                        "hasAAAA": { "type": ["boolean", "null"] },
+                        "hasMX": { "type": ["boolean", "null"] },
+                        "hasTXT": { "type": ["boolean", "null"] },
+                        "note": { "type": "string" }
+                      }
+                    },
+                    "securityHeaders": {
+                      "type": "object",
+                      "properties": {
+                        "strictTransportSecurity": { "type": ["string", "null"] },
+                        "contentSecurityPolicy": { "type": ["string", "null"] },
+                        "xFrameOptions": { "type": ["string", "null"] },
+                        "xContentTypeOptions": { "type": ["string", "null"] },
+                        "referrerPolicy": { "type": ["string", "null"] },
+                        "permissionsPolicy": { "type": ["string", "null"] }
+                      }
+                    },
+                    "techObservations": {
+                      "type": "object",
+                      "properties": {
+                        "server": { "type": ["string", "null"] },
+                        "poweredBy": { "type": ["string", "null"] },
+                        "poweredByCloudflare": { "type": "boolean" },
+                        "cmsGuess": { "type": ["string", "null"] }
+                      }
+                    },
+                    "findings": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing required `url` query parameter"
+          }
+        }
+      }
+    }
+  }
+}
