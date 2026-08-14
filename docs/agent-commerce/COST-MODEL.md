@@ -44,12 +44,30 @@ Solving for a price where facilitator cost is a smaller fraction of revenue, hol
 
 **At $0.005–$0.01/call — still within the range this document's earlier pricing note called "the same range as the existing POC and comparable market" — the facilitator fee becomes a manageable ~10–20% of revenue instead of ~100%.** The facilitator's *absolute* per-settlement cost is fixed regardless of what Qzenta charges; only the price determines what fraction of revenue it consumes.
 
-## Correction to the Executive Recommendation
+## Pricing decision (Daniel, 14 Aug 2026): re-priced to $0.01/call
 
-`EXECUTIVE-RECOMMENDATION.md` Q11 previously said "start in the same $0.001–$0.01 range as the existing POC." That range is too wide given this finding — **the low end of that range ($0.001) is now known to be unprofitable at any volume**, not just untested. The floor price should be set with the $0.001/settlement facilitator fee as an explicit, non-negotiable input, not discovered empirically after launch. Recommend re-pricing the existing POC to at least $0.005/call before any staging deployment, and treating Section 19's pricing experiment as validating the range *above* the facilitator-fee floor, not testing whether $0.001 works (it provably doesn't, on cost grounds alone, independent of demand).
+Approved — go straight to $0.01/call rather than the $0.005 minimum, since there's no reason to under-price a service that isn't live yet. At $0.01/call and 100,000 req/month, this models to **~$896 contribution margin (~90%)** against the default Coinbase facilitator's fee, per the table above. Implemented in `src/index.ts` and `docs/agent-commerce/openapi.json`/`SERVICE-CATALOGUE.md` — code-only change, no live deployment, no real transaction, does not cross a Section 27 approval gate.
+
+## Facilitator-fee dependency — verified before re-pricing, as requested
+
+The $0.001/settlement figure above is **specific to Coinbase's default facilitator** (`x402.org/facilitator` / CDP production facilitator), not a protocol-level constant. Two checks were run before finalizing the re-price:
+
+**1. Self-verification/self-settlement (skipping the facilitator entirely):** Confirmed real and documented — the x402 Foundation ships a ["self-facilitation" reference example](https://github.com/x402-foundation/x402/tree/main/examples/typescript/servers/self-facilitation). Verification (checking the client's payment payload/signature) can be done off-chain with no facilitator at all, at zero marginal cost. Settlement (actually broadcasting the `transferWithAuthorization` transaction on-chain) requires: direct RPC node connectivity, a funded gas wallet, and (per x402 docs) transaction-monitoring/duplicate-settlement-detection logic Qzenta would have to build and operate itself. Gas cost on Base (an L2) for this kind of transaction is "as low as $0.001" per transaction — **comparable to, not clearly cheaper than, Coinbase's flat per-settlement fee** — while trading a fixed, predictable third-party fee for real operational burden: a hot wallet holding gas funds (itself arguably a production-wallet-adjacent decision), an RPC dependency, and new failure modes (stuck/failed settlements) that don't exist when a hosted facilitator absorbs that risk. **Not recommended at this stage** — this is exactly the kind of "elaborate infrastructure before validation" the brief's Section 28 warns against building prematurely, and self-facilitation would itself likely need its own approval-gate conversation given it requires a funded on-chain wallet.
+
+**2. Alternative facilitators — fee structures differ materially, but none evaluated as a switch:**
+
+| Facilitator | Fee structure | Source |
+|---|---|---|
+| Coinbase CDP (default, currently used) | Flat $0.001/settlement past 1,000/month free | Coinbase Developer Platform announcement (above) |
+| **Thirdweb** | **0.3% of transaction value** — at $0.01/call this is $0.00003/call, ~33x cheaper than Coinbase's flat fee in absolute terms | [thirdweb pricing](https://thirdweb.com/pricing) |
+| Heurist | Free, no API key required (per Phase 2 competitive research) | Cited in market research Section D sourcing |
+| PayAI | Cross-chain (Avalanche/Polygon/Solana), but requires holding PayAI's native token for "maximum benefits" — adds token-price exposure Qzenta doesn't currently have | Search-sourced, not independently verified against PayAI's own docs |
+| x402.rs | Open-source, self-hostable — same self-facilitation tradeoffs as above, just pre-built | [x402-rs/x402-rs](https://github.com/x402-rs/x402-rs) |
+
+**This does change the picture in one specific sense:** a percentage-based facilitator (Thirdweb) would cost meaningfully less than Coinbase's flat fee at Qzenta's price points, and free facilitators (Heurist) exist. **It does not change the $0.01 re-pricing decision** — the re-price already produces healthy margin (~90%) against the *more expensive* default facilitator, so it doesn't depend on switching. What it does change: **facilitator choice is a real, live lever for improving margin further, not a fixed cost to design around.** Per the original brief's Section 22 caution — the public Coinbase facilitator is "fine for testnet; worth a second look before real funds move through it" — evaluating a facilitator switch (Thirdweb's percentage fee in particular) belongs in that pre-mainnet review, not decided unilaterally here. Staying on the Coinbase default for now.
 
 ## Caveats
 
 - This model does not include Sikatrix-side services, which would have their own (likely higher, given the specialized/regulated nature of the calculations) willingness-to-pay ceiling — see market research Section F.
 - CPU-time-per-request is estimated, not measured. Re-run this model with real `wrangler tail`/Logpush data once there's actual traffic — the structured logging shipped today (see `SECURITY-REQUIREMENTS.md`) captures latency but not CPU time specifically; consider adding CPU-time sampling if this becomes load-bearing for a real pricing decision.
-- Does not model alternative facilitators (e.g. Heurist's facilitator, cited in research as currently free with no API key) — switching facilitators is a real lever not evaluated here, flagged as a follow-up, not a recommendation, since facilitator choice also has trust/reliability implications the original brief flagged as worth a "second look" (Section 22).
+- Facilitator fee comparisons above are current as of 14 Aug 2026 sourcing and not exhaustively verified against every provider's own docs (flagged per-row) — re-verify directly before any actual facilitator switch, don't rely on this table alone.

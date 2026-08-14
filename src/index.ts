@@ -61,7 +61,7 @@ app.get("/", (c) => {
       "HTTP status, redirect chain, HTTPS usage, common security headers, and " +
       "basic technology observations.",
     endpoint: "GET /snapshot?url=<target>",
-    price: "$0.001 test USDC (base-sepolia — no real funds)",
+    price: "$0.01 test USDC (base-sepolia — no real funds)",
     network: c.env.X402_NETWORK,
     status: "proof-of-concept — not for production traffic",
     provider: "Qzenta (Pty) Ltd — https://qzenta.com",
@@ -78,7 +78,7 @@ app.use(
       c.env.X402_PAY_TO,
       {
         "/snapshot/*": {
-          price: "$0.001",
+          price: "$0.01",
           network: c.env.X402_NETWORK,
           config: {
             description: "One website security snapshot",

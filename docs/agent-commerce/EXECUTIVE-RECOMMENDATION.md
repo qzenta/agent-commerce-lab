@@ -2,7 +2,7 @@
 
 **Date:** 14 Aug 2026
 **For:** Daniel Onukpa
-**Supporting documents:** [Market Research](./AGENT-COMMERCE-MARKET-RESEARCH.md) · [Discovery Architecture](./AGENT-DISCOVERY-ARCHITECTURE.md) · [Discoverability Strategy](./AGENT-DISCOVERABILITY-STRATEGY.md) · [ADR-001](./ADR-001-agent-commerce-architecture.md) · [Security Requirements](./SECURITY-REQUIREMENTS.md) · [Machine Identity](./MACHINE-IDENTITY.md) · [npm audit Findings](./NPM-AUDIT-FINDINGS.md) · [Service Catalogue draft](./SERVICE-CATALOGUE.md)
+**Supporting documents:** [Market Research](./AGENT-COMMERCE-MARKET-RESEARCH.md) · [Discovery Architecture](./AGENT-DISCOVERY-ARCHITECTURE.md) · [Discoverability Strategy](./AGENT-DISCOVERABILITY-STRATEGY.md) · [ADR-001](./ADR-001-agent-commerce-architecture.md) · [Security Requirements](./SECURITY-REQUIREMENTS.md) · [Machine Identity](./MACHINE-IDENTITY.md) · [npm audit Findings](./NPM-AUDIT-FINDINGS.md) · [Service Catalogue draft](./SERVICE-CATALOGUE.md) · [Cost Model](./COST-MODEL.md) · [MCP paidTool Blocker](./MCP-PAIDTOOL-BLOCKER.md)
 
 ## Direct answers
 
@@ -15,8 +15,8 @@ None yet, in practice. The mechanisms that *would* work once deployed: x402scan 
 **3. What must we implement to improve discovery?**
 In order: (a) a public staging deployment (stop-gate, needs your approval), (b) the OpenAPI spec — drafted, in the repo now, (c) registration with x402scan/402 Index, (d) an MCP `paidTool` wrapper on the same Worker.
 
-**4. Does Qzenta need MCP?**
-Not strictly, but it's cheap given the existing Cloudflare Agents SDK support (`withX402`/`paidTool` share the same facilitator config as the HTTP endpoint), and it reaches MCP-native agent clients (Claude, Cursor, etc.) that the HTTP-only path doesn't. Recommend yes, as a low-cost addition, not a rebuild.
+**4. Does Qzenta need MCP? [UPDATED 14 Aug 2026]**
+Not strictly, and the "cheap addition" framing needs a correction: an attempt to build the MCP `paidTool` wrapper hit a real, currently-unresolved blocker. Cloudflare's Agents SDK (`agents@0.20.1`) requires `zod@^4.0.0` and `react@^19.0.0` as hard peer dependencies; this repo's entire `x402-hono` payment stack is locked to `zod@3.25.76`. `npm install` was refused via a real ERESOLVE conflict rather than forced with `--legacy-peer-deps`, since running two incompatible zod majors against payment-schema and tool-schema validation in the same Worker is a genuine silent-bug risk, not a formality — see [MCP-PAIDTOOL-BLOCKER.md](./MCP-PAIDTOOL-BLOCKER.md). **Recommendation stands as "yes, eventually" but is now correctly an open item, not a low-cost near-term addition** — it's blocked until either `agents` relaxes its zod peer range or `x402-hono` moves off zod v3. The HTTP endpoint remains fully functional without it; MCP reach is foregone for now, not lost permanently.
 
 **5. Should Qzenta register with x402scan?**
 Not yet — no public origin exists to register. Once one does: yes, it's free and the closest thing to a real discovery channel available today. Requires your approval per Section 27 before the actual registration action, even after staging is live.
@@ -36,14 +36,14 @@ From the ranked-20 research (full table in market research Section E): (1) bundl
 **10. Which single service should become our first commercial product?**
 The bundled **Site Health Passport** (Qzenta side). It extends already-working code rather than starting fresh, and targets the one demonstrated real pattern in the ecosystem — aggregation outperforms atomic lookups by every volume signal found. This is a recommendation, not a decision — see approval requests below.
 
-**11. What should it cost? [UPDATED 14 Aug 2026 — supersedes the original answer]**
-**Not $0.001, the current POC price — that price is now known to be unprofitable at any volume, not just untested.** Coinbase's x402 facilitator began charging $0.001/settled payment (after 1,000 free/month) as of 1 Jan 2026 — exactly equal to the current service price, meaning the facilitator fee alone consumes the entire revenue before any Workers cost. See [COST-MODEL.md](./COST-MODEL.md) for the full numbers. Recommend re-pricing to at least $0.005/call, which brings the facilitator fee down to ~10–20% of revenue instead of ~100%. Section 19's pricing experiment should validate the range *above* this facilitator-fee floor, not re-test whether $0.001 works.
+**11. What should it cost? [DECIDED 14 Aug 2026 — Daniel approved, implemented]**
+**$0.01/call — re-priced in code, no longer just a recommendation.** The original $0.001 POC price was found unprofitable at any volume: Coinbase's x402 facilitator began charging $0.001/settled payment (after 1,000 free/month) as of 1 Jan 2026, exactly equal to the old price, so the facilitator fee alone consumed 100% of revenue before any Workers cost. Before re-pricing, checked whether self-facilitation (skipping the facilitator) or an alternative facilitator would change the picture — self-facilitation trades a comparable gas cost for real operational burden not worth taking on pre-validation; Thirdweb's facilitator (0.3% of transaction value) would be materially cheaper than Coinbase's flat fee at this price point, but switching facilitators is a trust/reliability decision reserved for the pre-mainnet review (Section 22), not decided here — staying on the Coinbase default. Full numbers and the facilitator comparison: [COST-MODEL.md](./COST-MODEL.md). Live in `src/index.ts` and `openapi.json`/`SERVICE-CATALOGUE.md`; this is a code-only change on testnet, no deployment, doesn't cross a Section 27 gate.
 
 **12. What would it cost us to deliver one transaction?**
-**Modeled, with real published pricing** (see [COST-MODEL.md](./COST-MODEL.md)): Cloudflare Workers costs are near-negligible at this service's volume/compute profile (subrequests aren't billed at all; CPU time is a rounding error against the included pool). The dominant, non-negligible cost is the x402 facilitator's $0.001/settlement fee past the free 1,000/month — at the current $0.001 price this is a 1:1 cost-to-revenue ratio, i.e. zero gross margin before even counting the $5/month Workers Paid-plan fixed cost.
+**Modeled, with real published pricing** (see [COST-MODEL.md](./COST-MODEL.md)): Cloudflare Workers costs are near-negligible at this service's volume/compute profile (subrequests aren't billed at all; CPU time is a rounding error against the included pool). The dominant, non-negligible cost is the x402 facilitator's $0.001/settlement fee past the free 1,000/month — at the now-live $0.01 price, that's a fixed $0.001 cost against $0.01 revenue per transaction, a 10% cost ratio rather than the old price's 100%.
 
-**13. Expected contribution margin at 1,000/10,000/100,000 requests?**
-**Modeled** — at the current $0.001 price: **−400%, −40%, and −4%** respectively (losses shrink as a percentage as the fixed $5/month Workers cost amortizes, but stay negative at every volume tested). At a corrected $0.01/call price, 100,000 requests/month would produce roughly **$896 contribution margin (~90%)**. Full table in [COST-MODEL.md](./COST-MODEL.md).
+**13. Expected contribution margin at 1,000/10,000/100,000 requests? [live price is now $0.01]**
+**Modeled** — at the now-implemented $0.01 price, 100,000 requests/month produces roughly **$896 contribution margin (~90%)**. (For reference, the old $0.001 price modeled to −400%/−40%/−4% at 1k/10k/100k requests — unprofitable at every volume, which is why it was replaced.) Full table in [COST-MODEL.md](./COST-MODEL.md).
 
 **14. How will an external agent discover it?**
 Per the discovery architecture: OpenAPI spec → x402scan/402 Index registration → MCP `paidTool` listing. No SEO-driven path — agentic discovery and SEO are explicitly different tracks (discoverability strategy).
@@ -66,13 +66,15 @@ Phase 1 proved the payment mechanics work locally. Phase 2's job was to determin
 
 On the Sikatrix side, the research surfaced something the original brief didn't anticipate: a live South African competitor (finserv-mcp.co.za) already validating willingness-to-pay in almost exactly the niche Sikatrix would enter. That's good news (proof of demand) and a real complication (not greenfield) — Sikatrix's edge would have to be "a licensed accounting practice stands behind this answer," not price.
 
-## Current status
+## Current status [updated 14 Aug 2026 — post-hardening follow-up]
 
-- **Implementation:** Phase 1 POC unchanged and untouched this phase (still local/testnet, still not deployed).
+- **Implementation:** still local/testnet, still not deployed — but hardened since the initial Phase 2 pass: rate limiting (Cloudflare's native binding, verified locally), structured request logging, and a corrected $0.01/call price all shipped as code-only changes.
 - **Discovery:** none — nothing is publicly reachable.
 - **Trust/identity:** documented (Machine Identity doc), nothing registered.
-- **Security:** SSRF/timeout/redirect-validation/DNS-rebinding protections already shipped (Phase 1); rate limiting, structured logging, and production-wallet secret management remain undone and are correctly gated on a real deployment decision.
-- **npm audit:** resolved as "no action needed" for both HIGH-severity advisories (confirmed absent from the compiled bundle) and the 23 moderate advisories (bundled but unreachable dead code); tracked as a standing follow-up against future `x402-hono` upgrades.
+- **Security:** SSRF/timeout/redirect-validation/DNS-rebinding protections (Phase 1) plus rate limiting and structured logging (this pass) are shipped. Production-wallet secret management remains undone and is correctly gated on a real deployment decision.
+- **npm audit:** resolved as "no action needed" for both HIGH-severity advisories (confirmed absent from the compiled bundle) and the 23 moderate advisories (bundled but unreachable dead code); re-verified unchanged this pass; tracked as a standing follow-up against future `x402-hono` upgrades.
+- **MCP:** attempted, blocked on a real `zod`/`react` peer-dependency conflict between `agents@0.20.1` and `x402-hono`'s zod v3 tree — not forced, documented as an open item (see Q4).
+- **Pricing:** corrected from $0.001 (provably unprofitable) to $0.01/call, after verifying self-facilitation and alternative facilitators didn't change the underlying picture enough to justify a different number or a facilitator switch right now.
 
 ## Risks
 

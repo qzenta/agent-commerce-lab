@@ -15,16 +15,16 @@ This is a machine-readable catalogue with a human-readable layer, not a marketin
 | Protocol | HTTP + x402 |
 | MCP availability | Not yet built — planned per [AGENT-DISCOVERY-ARCHITECTURE.md](./AGENT-DISCOVERY-ARCHITECTURE.md) |
 | x402 availability | Yes — `paymentMiddleware` on `/snapshot/*` |
-| Pricing | $0.001 test USDC per call |
+| Pricing | $0.01 test USDC per call (re-priced 14 Aug 2026 — see [COST-MODEL.md](./COST-MODEL.md); was $0.001, found unprofitable against the default facilitator's fee at any volume) |
 | Accepted network | `base-sepolia` (testnet only — see note below) |
 | Input schema | `url` query param, http(s) only, rejected if it resolves to a private/internal address |
 | Output schema | See [openapi.json](./openapi.json) `#/paths/~1snapshot~1run/get/responses/200` |
-| Rate limits | None implemented yet — see [SECURITY-REQUIREMENTS.md](./SECURITY-REQUIREMENTS.md) |
+| Rate limits | 30 req/60s on `GET /`, 20 req/60s on `GET /snapshot/*`, IP-keyed — see [SECURITY-REQUIREMENTS.md](./SECURITY-REQUIREMENTS.md) |
 | SLA / reliability | None offered — proof-of-concept, no uptime commitment |
 | Privacy policy | Not yet published |
 | Terms | Not yet published |
 | Support / contact | info@qzenta.com |
-| Version | 0.1.0 |
+| Version | 0.2.0 |
 | Status | **Proof-of-concept — not deployed, not accepting real payment** |
 | Geographic / legal limitations | None known — the service scans publicly reachable URLs only, no jurisdiction restriction identified |
 

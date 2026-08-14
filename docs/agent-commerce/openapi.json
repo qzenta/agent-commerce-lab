@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Qzenta Website Security Snapshot",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Fetches a URL and returns a structured, non-invasive security snapshot: HTTP status, redirect chain, HTTPS usage, common security headers, and basic technology observations. Testnet only — payment settles in test USDC on base-sepolia, no real funds.",
     "contact": {
       "name": "Qzenta (Pty) Ltd",
@@ -43,7 +43,7 @@
                   "service": "Qzenta Website Security Snapshot",
                   "description": "Fetches a URL and returns a structured, non-invasive security snapshot: HTTP status, redirect chain, HTTPS usage, common security headers, and basic technology observations.",
                   "endpoint": "GET /snapshot/run?url=<target>",
-                  "price": "$0.001 test USDC (base-sepolia — no real funds)",
+                  "price": "$0.01 test USDC (base-sepolia — no real funds)",
                   "network": "base-sepolia",
                   "status": "proof-of-concept — not for production traffic",
                   "provider": "Qzenta (Pty) Ltd — https://qzenta.com"
@@ -73,7 +73,7 @@
             {
               "scheme": "exact",
               "network": "base-sepolia",
-              "maxAmountRequired": "1000",
+              "maxAmountRequired": "10000",
               "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
               "assetName": "USDC",
               "payTo": "0x000000000000000000000000000000000000dEaD",
