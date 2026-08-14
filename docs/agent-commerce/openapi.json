@@ -13,7 +13,7 @@
   "servers": [
     {
       "url": "https://qzenta-security-snapshot.qzenta.workers.dev",
-      "description": "Isolated staging deployment (14 Aug 2026) — testnet only (base-sepolia), burn-address payTo, not a production endpoint. Deployed for discovery-readiness auditing per Daniel's approval; not registered with any discovery index yet."
+      "description": "Isolated staging deployment (14 Aug 2026) — testnet only (base-sepolia), real funded testnet payTo wallet (not the burn address anymore), not a production endpoint. Deployed for discovery-readiness auditing per Daniel's approval; not registered with any discovery index yet."
     },
     {
       "url": "http://127.0.0.1:8787",
@@ -80,10 +80,10 @@
               "maxAmountRequired": "10000",
               "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
               "assetName": "USDC",
-              "payTo": "0x000000000000000000000000000000000000dEaD",
+              "payTo": "0x1866Fd80B1196AcC70A98a50917A8FD4639FE823",
               "description": "One website security snapshot",
               "maxTimeoutSeconds": 300,
-              "note": "payTo is currently a burn-address placeholder — this service is not accepting real payment. See wrangler.jsonc."
+              "note": "Real, funded base-sepolia testnet wallet (14 Aug 2026) — test USDC only, zero real monetary value. See docs/agent-commerce/TESTNET-WALLET.md."
             }
           ]
         },

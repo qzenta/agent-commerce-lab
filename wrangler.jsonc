@@ -8,12 +8,16 @@
     // Test network only. Never point this at a mainnet network without
     // explicit human approval — see /areas/cloudflare-wallets-agentic-commerce.md
     "X402_NETWORK": "base-sepolia",
-    // Placeholder — replace with the real payout address for the Qzenta
-    // Virtual Wallet once Cloudflare Wallets funding is live. Until then
-    // this is the standard EVM burn/null address, no real funds.
-    // (Fixed 2026-08-14: original placeholder was 1 byte short of a valid
-    // 20-byte address and failed viem's EIP-55 checksum validation.)
-    "X402_PAY_TO": "0x000000000000000000000000000000000000dEaD"
+    // Real base-sepolia testnet wallet (14 Aug 2026), generated via viem,
+    // funded with 20 test USDC from Circle's faucet (confirmed on-chain via
+    // direct RPC balanceOf call — see docs/agent-commerce/TESTNET-WALLET.md).
+    // This is the address only — the private key is never given to the
+    // Worker, since paymentMiddleware's payTo parameter only ever needs the
+    // public address (confirmed against x402-hono's own type declarations).
+    // Zero real monetary value. Still not the real Qzenta Virtual Wallet —
+    // replace this once Cloudflare Wallets funding ships and Daniel decides
+    // to go live, per /areas/cloudflare-wallets-agentic-commerce.md.
+    "X402_PAY_TO": "0x1866Fd80B1196AcC70A98a50917A8FD4639FE823"
   },
   "ratelimits": [
     {
