@@ -12,8 +12,12 @@
   },
   "servers": [
     {
+      "url": "https://qzenta-security-snapshot.qzenta.workers.dev",
+      "description": "Isolated staging deployment (14 Aug 2026) — testnet only (base-sepolia), burn-address payTo, not a production endpoint. Deployed for discovery-readiness auditing per Daniel's approval; not registered with any discovery index yet."
+    },
+    {
       "url": "http://127.0.0.1:8787",
-      "description": "Local development only — this service is not deployed publicly. No production server exists yet."
+      "description": "Local development."
     }
   ],
   "paths": {

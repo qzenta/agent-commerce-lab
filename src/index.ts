@@ -1,6 +1,9 @@
 import { Hono, type MiddlewareHandler } from "hono";
 import { paymentMiddleware } from "x402-hono";
 import { runSecuritySnapshot } from "./snapshot";
+// Single source of truth for the spec lives in docs/agent-commerce/ (human +
+// agent-facing docs); imported here so the served copy can't drift from it.
+import openApiSpec from "../docs/agent-commerce/openapi.json";
 
 type Bindings = {
   X402_NETWORK: "base-sepolia" | "base";
@@ -92,6 +95,13 @@ app.use(
     return mw(c, next);
   }
 );
+
+// Machine-readable contract — x402scan and similar indexers use this for
+// discovery, then validate the runtime 402 behavior against it. Must never
+// drift from what the routes below actually do.
+app.get("/openapi.json", (c) => {
+  return c.json(openApiSpec);
+});
 
 app.get("/snapshot/run", async (c) => {
   const target = c.req.query("url");
