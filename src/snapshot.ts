@@ -7,6 +7,10 @@
  */
 
 import { checkHostnameAllowed, fetchWithTimeout } from "./ssrf-guard";
+import { checkDnsRecords, type DnsCheckResult } from "./dns-check";
+import { probeTls, type TlsProbeResult } from "./tls-probe";
+import { scoreSecurityHeaders, type HeaderScore } from "./header-scoring";
+import { buildVerdict, type Verdict } from "./verdict";
 
 const FETCH_TIMEOUT_MS = 8000;
 
@@ -23,14 +27,12 @@ export interface SecuritySnapshot {
   tls: {
     usedHttps: boolean;
     protocol: string | null;
+    cipherSuite: string | null;
+    cipherSuiteId: string | null;
+    weakCipher: boolean;
+    probeError: string | null;
   };
-  dns: {
-    hasA: boolean | null;
-    hasAAAA: boolean | null;
-    hasMX: boolean | null;
-    hasTXT: boolean | null;
-    note: string;
-  };
+  dns: DnsCheckResult;
   securityHeaders: {
     strictTransportSecurity: string | null;
     contentSecurityPolicy: string | null;
@@ -39,6 +41,7 @@ export interface SecuritySnapshot {
     referrerPolicy: string | null;
     permissionsPolicy: string | null;
   };
+  headerScore: HeaderScore;
   techObservations: {
     server: string | null;
     poweredBy: string | null;
@@ -46,6 +49,7 @@ export interface SecuritySnapshot {
     cmsGuess: string | null;
   };
   findings: string[];
+  verdict: Verdict;
 }
 
 /** Follows redirects manually (capped) so we can report the chain. */
@@ -137,16 +141,29 @@ export async function runSecuritySnapshot(rawUrl: string): Promise<SecuritySnaps
   const findings: string[] = [];
 
   if (error || !response) {
-    findings.push(`Request failed: ${error ?? "unknown error"}`);
+    const httpError = error ?? "unknown error";
+    findings.push(`Request failed: ${httpError}`);
+    const headerScore = scoreSecurityHeaders({
+      usedHttps: false,
+      strictTransportSecurity: null,
+      contentSecurityPolicy: null,
+      xFrameOptions: null,
+      xContentTypeOptions: null,
+      referrerPolicy: null,
+      permissionsPolicy: null,
+    });
+    const tlsResult: TlsProbeResult = { version: null, cipherSuite: null, cipherSuiteId: null, weak: false, error: null };
     return {
       target,
       timestamp,
-      http: { status: null, ok: false, redirectChain: chain, finalUrl, error: error ?? "unknown error" },
-      tls: { usedHttps: false, protocol: null },
+      http: { status: null, ok: false, redirectChain: chain, finalUrl, error: httpError },
+      tls: { usedHttps: false, protocol: null, cipherSuite: null, cipherSuiteId: null, weakCipher: false, probeError: null },
       dns: emptyDns(),
       securityHeaders: emptySecurityHeaders(),
+      headerScore,
       techObservations: { server: null, poweredBy: null, poweredByCloudflare: false, cmsGuess: null },
       findings,
+      verdict: buildVerdict({ httpOk: false, httpError, usedHttps: false, headerScore, tls: tlsResult }),
     };
   }
 
@@ -180,9 +197,45 @@ export async function runSecuritySnapshot(rawUrl: string): Promise<SecuritySnaps
     // Body not readable (binary, huge, etc.) — non-fatal, skip CMS guess.
   }
 
+  const targetHostname = new URL(finalUrl ?? target).hostname;
+  const [dns, tls] = await Promise.all([
+    checkDnsRecords(targetHostname),
+    usedHttps ? probeTls(targetHostname) : Promise.resolve<TlsProbeResult>({
+      version: null,
+      cipherSuite: null,
+      cipherSuiteId: null,
+      weak: false,
+      error: "skipped — target is not served over HTTPS",
+    }),
+  ]);
+
+  if (tls.error && usedHttps) findings.push(`TLS probe: ${tls.error}`);
+  if (tls.weak) findings.push(`TLS cipher suite is weak/legacy: ${tls.cipherSuite ?? tls.cipherSuiteId}.`);
+
   if (chain.length > 3) findings.push(`Redirect chain is ${chain.length} hops long — consider flattening.`);
   if (response.status >= 500) findings.push(`Origin returned a server error (${response.status}).`);
   if (response.status >= 400 && response.status < 500) findings.push(`Origin returned a client error (${response.status}).`);
+
+  const headerScore = scoreSecurityHeaders({
+    usedHttps,
+    strictTransportSecurity: hsts,
+    contentSecurityPolicy: csp,
+    xFrameOptions: xfo,
+    xContentTypeOptions: xcto,
+    referrerPolicy: rp,
+    permissionsPolicy: pp,
+  });
+  for (const issue of headerScore.issues) {
+    findings.push(`[${issue.severity}] ${issue.header}: ${issue.message}`);
+  }
+
+  const verdict = buildVerdict({
+    httpOk: response.ok,
+    httpError: null,
+    usedHttps,
+    headerScore,
+    tls,
+  });
 
   return {
     target,
@@ -196,19 +249,13 @@ export async function runSecuritySnapshot(rawUrl: string): Promise<SecuritySnaps
     },
     tls: {
       usedHttps,
-      // Workers' fetch() does not expose raw TLS handshake details (cipher,
-      // negotiated version) to userland — only that the connection succeeded
-      // over https. A deeper TLS audit needs a raw socket check outside the
-      // Workers runtime; flagged here rather than faked.
-      protocol: usedHttps ? "TLS (negotiated version not exposed by Workers fetch())" : null,
+      protocol: tls.version ?? (usedHttps ? "unknown (TLS probe did not resolve a version)" : null),
+      cipherSuite: tls.cipherSuite,
+      cipherSuiteId: tls.cipherSuiteId,
+      weakCipher: tls.weak,
+      probeError: tls.error,
     },
-    dns: {
-      hasA: null,
-      hasAAAA: null,
-      hasMX: null,
-      hasTXT: null,
-      note: "DNS record checks require DNS-over-HTTPS lookups (e.g. Cloudflare 1.1.1.1) — not yet wired into this build.",
-    },
+    dns,
     securityHeaders: {
       strictTransportSecurity: hsts,
       contentSecurityPolicy: csp,
@@ -217,6 +264,7 @@ export async function runSecuritySnapshot(rawUrl: string): Promise<SecuritySnaps
       referrerPolicy: rp,
       permissionsPolicy: pp,
     },
+    headerScore,
     techObservations: {
       server,
       poweredBy,
@@ -224,11 +272,19 @@ export async function runSecuritySnapshot(rawUrl: string): Promise<SecuritySnaps
       cmsGuess,
     },
     findings,
+    verdict,
   };
 }
 
-function emptyDns() {
-  return { hasA: null, hasAAAA: null, hasMX: null, hasTXT: null, note: "not evaluated" };
+function emptyDns(): DnsCheckResult {
+  return {
+    hasA: false,
+    hasAAAA: false,
+    hasMX: false,
+    hasTXT: false,
+    records: { A: [], AAAA: [], MX: [], TXT: [] },
+    note: "not evaluated",
+  };
 }
 function emptySecurityHeaders() {
   return {
@@ -241,14 +297,26 @@ function emptySecurityHeaders() {
   };
 }
 function emptySnapshot(target: string, timestamp: string, error: string): SecuritySnapshot {
+  const headerScore = scoreSecurityHeaders({
+    usedHttps: false,
+    strictTransportSecurity: null,
+    contentSecurityPolicy: null,
+    xFrameOptions: null,
+    xContentTypeOptions: null,
+    referrerPolicy: null,
+    permissionsPolicy: null,
+  });
+  const tls: TlsProbeResult = { version: null, cipherSuite: null, cipherSuiteId: null, weak: false, error: null };
   return {
     target,
     timestamp,
     http: { status: null, ok: false, redirectChain: [], finalUrl: null, error },
-    tls: { usedHttps: false, protocol: null },
+    tls: { usedHttps: false, protocol: null, cipherSuite: null, cipherSuiteId: null, weakCipher: false, probeError: null },
     dns: emptyDns(),
     securityHeaders: emptySecurityHeaders(),
+    headerScore,
     techObservations: { server: null, poweredBy: null, poweredByCloudflare: false, cmsGuess: null },
     findings: [error],
+    verdict: buildVerdict({ httpOk: false, httpError: error, usedHttps: false, headerScore, tls }),
   };
 }
