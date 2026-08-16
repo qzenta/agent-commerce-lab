@@ -12,8 +12,8 @@
   },
   "servers": [
     {
-      "url": "https://qzenta-security-snapshot.qzenta.workers.dev",
-      "description": "Isolated staging deployment (14 Aug 2026) — testnet only (base-sepolia), real funded testnet payTo wallet (not the burn address anymore), not a production endpoint. Deployed for discovery-readiness auditing per Daniel's approval; not registered with any discovery index yet."
+      "url": "https://sitehealth.qzenta.com",
+      "description": "Isolated staging deployment (14 Aug 2026, custom domain added 16 Aug 2026) — testnet only (base-sepolia), real funded testnet payTo wallet (not the burn address anymore), not a production endpoint. Deployed for discovery-readiness auditing per Daniel's approval; not registered with any discovery index yet. Also reachable at the original qzenta-security-snapshot.qzenta.workers.dev URL (Custom Domain is additive, not a replacement)."
     },
     {
       "url": "http://127.0.0.1:8787",
@@ -137,7 +137,7 @@
                       "scheme": "exact",
                       "network": "base-sepolia",
                       "maxAmountRequired": "10000",
-                      "resource": "https://qzenta-security-snapshot.qzenta.workers.dev/snapshot/run?url=https://example.com",
+                      "resource": "https://sitehealth.qzenta.com/snapshot/run?url=https://example.com",
                       "description": "One website security snapshot",
                       "mimeType": "application/json",
                       "payTo": "0x1866Fd80B1196AcC70A98a50917A8FD4639FE823",
