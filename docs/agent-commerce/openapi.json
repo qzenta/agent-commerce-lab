@@ -46,6 +46,7 @@
                     "service": { "type": "string" },
                     "description": { "type": "string" },
                     "endpoint": { "type": "string" },
+                    "endpoints": { "type": "array", "items": { "type": "string" } },
                     "price": { "type": "string" },
                     "network": { "type": "string", "enum": ["base-sepolia", "base"] },
                     "status": { "type": "string" },
@@ -56,6 +57,10 @@
                   "service": "Qzenta Website Security Snapshot",
                   "description": "Fetches a URL and returns a structured, non-invasive security snapshot: HTTP status, redirect chain, HTTPS usage, common security headers, and basic technology observations.",
                   "endpoint": "GET /snapshot/run?url=<target>",
+                  "endpoints": [
+                    "GET /snapshot/run?url=<target> — single domain, $0.01",
+                    "POST /snapshot/batch — 2-20 domains in one paid call, $0.01 per domain"
+                  ],
                   "price": "$0.01 test USDC (base-sepolia — no real funds)",
                   "network": "base-sepolia",
                   "status": "proof-of-concept — not for production traffic",
@@ -217,6 +222,192 @@
           },
           "400": {
             "description": "Missing required `url` query parameter"
+          }
+        }
+      }
+    },
+    "/snapshot/batch": {
+      "post": {
+        "operationId": "runBatchSecuritySnapshot",
+        "summary": "Run a batch/portfolio website security scan across 2-20 domains (paid)",
+        "description": "Scans each of 2-20 domains with the same non-invasive pipeline as GET /snapshot/run: HTTP status + redirect chain (re-validated against the SSRF guard on every hop), HTTPS usage, security headers, DNS, TLS identification, and an LLM-consumable verdict. Requires x402 payment priced per domain ($0.01 x N). A single bad domain never fails the whole batch — every result carries its own ok/error.",
+        "security": [{ "x402Payment": [] }],
+        "x-payment-info": {
+          "protocols": ["x402"],
+          "accepts": [
+            {
+              "scheme": "exact",
+              "network": "base-sepolia",
+              "maxAmountRequired": "200000",
+              "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+              "assetName": "USDC",
+              "payTo": "0x1866Fd80B1196AcC70A98a50917A8FD4639FE823",
+              "description": "Batch website security snapshot ($0.01 per domain — maxAmountRequired is dynamic: 10000 x domain count in the request body, 2-20 domains)",
+              "maxTimeoutSeconds": 300,
+              "note": "Example above is the 20-domain maximum ($0.20). The 402 challenge's maxAmountRequired always reflects the actual domain count of the request body."
+            }
+          ]
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["domains"],
+                "properties": {
+                  "domains": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 20,
+                    "description": "2-20 full http(s) URLs to scan. Each domain is individually SSRF-guarded and redirect-revalidated by the shared snapshot pipeline; an invalid or non-http(s) entry is reported as a per-item error, not a batch failure.",
+                    "items": { "type": "string", "format": "uri" }
+                  }
+                }
+              },
+              "example": {
+                "domains": ["https://example.com", "https://example.org"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Invalid batch request — returned BEFORE any payment challenge: body is not JSON, domains is missing/not an array, has fewer than 2 or more than 20 entries, contains non-string/empty entries, or contains duplicate domains."
+          },
+          "402": {
+            "description": "Payment required — same x402 v1 PaymentRequirements shape as GET /snapshot/run, with maxAmountRequired = 10000 x N atomic units reflecting the request body's domain count.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "accepts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "scheme": { "type": "string", "enum": ["exact"] },
+                          "network": { "type": "string", "enum": ["base-sepolia", "base"] },
+                          "maxAmountRequired": { "type": "string", "description": "Atomic units of `asset` — 10000 per domain (USDC has 6 decimals; \"20000\" = $0.02 for 2 domains)" },
+                          "resource": { "type": "string", "format": "uri", "description": "The exact URL being requested, echoed back" },
+                          "description": { "type": "string" },
+                          "mimeType": { "type": "string" },
+                          "payTo": { "type": "string", "description": "Recipient address — see docs/agent-commerce/TESTNET-WALLET.md" },
+                          "maxTimeoutSeconds": { "type": "integer" },
+                          "asset": { "type": "string", "description": "ERC-20 contract address of the payment asset (USDC on base-sepolia)" },
+                          "outputSchema": { "type": "object" },
+                          "extra": { "type": "object", "properties": { "name": { "type": "string" }, "version": { "type": "string" } } }
+                        },
+                        "required": ["scheme", "network", "maxAmountRequired", "resource", "payTo", "asset"]
+                      }
+                    },
+                    "x402Version": { "type": "integer" }
+                  }
+                },
+                "example": {
+                  "error": "X-PAYMENT header is required",
+                  "accepts": [
+                    {
+                      "scheme": "exact",
+                      "network": "base-sepolia",
+                      "maxAmountRequired": "20000",
+                      "resource": "https://sitehealth.qzenta.com/snapshot/batch",
+                      "description": "Batch scan of 2 domains ($0.01 per domain)",
+                      "mimeType": "application/json",
+                      "payTo": "0x1866Fd80B1196AcC70A98a50917A8FD4639FE823",
+                      "maxTimeoutSeconds": 300,
+                      "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+                      "outputSchema": { "input": { "type": "http", "method": "POST", "discoverable": true } },
+                      "extra": { "name": "USDC", "version": "2" }
+                    }
+                  ],
+                  "x402Version": 1
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Batch results — one entry per input domain, request order preserved; a per-domain failure is isolated to its own entry and never fails the batch.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["results"],
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["domain", "ok"],
+                        "properties": {
+                          "domain": { "type": "string" },
+                          "ok": { "type": "boolean", "description": "true when a snapshot was produced for this domain (an unreachable or failing site still returns ok:true with its FAIL-verdict snapshot); false only for input-level failures (invalid/non-http(s) URL) or when the batch deadline passed before the domain started." },
+                          "snapshot": {
+                            "type": ["object", "null"],
+                            "description": "The security snapshot for this domain — identical shape to GET /snapshot/run's 200 body. Present when ok is true.",
+                            "properties": {
+                              "target": { "type": "string" },
+                              "timestamp": { "type": "string", "format": "date-time" },
+                              "http": {
+                                "type": "object",
+                                "properties": {
+                                  "status": { "type": ["integer", "null"] },
+                                  "ok": { "type": "boolean" },
+                                  "redirectChain": { "type": "array", "items": { "type": "string" } },
+                                  "finalUrl": { "type": ["string", "null"] },
+                                  "error": { "type": ["string", "null"] }
+                                }
+                              },
+                              "tls": {
+                                "type": "object",
+                                "properties": {
+                                  "usedHttps": { "type": "boolean" },
+                                  "protocol": { "type": ["string", "null"] }
+                                }
+                              },
+                              "dns": {
+                                "type": "object",
+                                "properties": {
+                                  "hasA": { "type": ["boolean", "null"] },
+                                  "hasAAAA": { "type": ["boolean", "null"] },
+                                  "hasMX": { "type": ["boolean", "null"] },
+                                  "hasTXT": { "type": ["boolean", "null"] },
+                                  "note": { "type": "string" }
+                                }
+                              },
+                              "securityHeaders": {
+                                "type": "object",
+                                "properties": {
+                                  "strictTransportSecurity": { "type": ["string", "null"] },
+                                  "contentSecurityPolicy": { "type": ["string", "null"] },
+                                  "xFrameOptions": { "type": ["string", "null"] },
+                                  "xContentTypeOptions": { "type": ["string", "null"] },
+                                  "referrerPolicy": { "type": ["string", "null"] },
+                                  "permissionsPolicy": { "type": ["string", "null"] }
+                                }
+                              },
+                              "techObservations": {
+                                "type": "object",
+                                "properties": {
+                                  "server": { "type": ["string", "null"] },
+                                  "poweredBy": { "type": ["string", "null"] },
+                                  "poweredByCloudflare": { "type": "boolean" },
+                                  "cmsGuess": { "type": ["string", "null"] }
+                                }
+                              },
+                              "findings": { "type": "array", "items": { "type": "string" } }
+                            }
+                          },
+                          "error": { "type": ["string", "null"], "description": "Present when ok is false — the reason this domain was not scanned." }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
