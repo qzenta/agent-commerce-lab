@@ -59,7 +59,9 @@
                   "endpoint": "GET /snapshot/run?url=<target>",
                   "endpoints": [
                     "GET /snapshot/run?url=<target> — single domain, $0.01",
-                    "POST /snapshot/batch — 2-20 domains in one paid call, $0.01 per domain"
+                    "POST /snapshot/batch — 2-20 domains in one paid call, $0.01 per domain",
+                    "GET /history?domain=<host> — past snapshots for a domain (free)",
+                    "GET /changes?domain=<host> — detected changes for a domain (free)"
                   ],
                   "price": "$0.01 test USDC (base-sepolia — no real funds)",
                   "network": "base-sepolia",
@@ -85,6 +87,13 @@
             "required": true,
             "description": "The http(s) URL to scan. Rejected if it resolves to a private/internal address (SSRF guard).",
             "schema": { "type": "string", "format": "uri" }
+          },
+          {
+            "name": "history",
+            "in": "query",
+            "required": false,
+            "description": "When exactly \"true\", persists this snapshot to the history store and appends an additive `change` object (version-gated diff vs the most recent prior complete snapshot for the same domain). Absent or any other value: behavior is byte-for-byte unchanged (no persistence, no cost).",
+            "schema": { "type": "string", "enum": ["true"] }
           }
         ],
         "x-payment-info": {
@@ -214,7 +223,49 @@
                         "cmsGuess": { "type": ["string", "null"] }
                       }
                     },
-                    "findings": { "type": "array", "items": { "type": "string" } }
+                    "findings": { "type": "array", "items": { "type": "string" } },
+                    "change": {
+                      "type": ["object", "null"],
+                      "description": "Present only when the request included history=true. Comparison of this snapshot against the most recent prior complete snapshot for the same domain; non-comparable results (first scan, version mismatch, storage unavailable) are explicit with a reason, never a fabricated delta.",
+                      "properties": {
+                        "comparable": { "type": "boolean" },
+                        "reason": { "type": "string" },
+                        "changedFields": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": { "type": "string" },
+                              "from": {},
+                              "to": {},
+                              "materiality": { "type": "string", "enum": ["critical", "material", "informational"] }
+                            }
+                          }
+                        },
+                        "scoreDelta": { "type": ["integer", "null"] },
+                        "verdictMoved": { "type": "boolean" },
+                        "detectedAt": { "type": "string", "format": "date-time" },
+                        "changeId": { "type": ["integer", "null"] },
+                        "from": {
+                          "type": ["object", "null"],
+                          "properties": {
+                            "snapshotId": { "type": "integer" },
+                            "scannedAt": { "type": "string", "format": "date-time" },
+                            "scannerVersion": { "type": "string" },
+                            "scoringVersion": { "type": "string" }
+                          }
+                        },
+                        "to": {
+                          "type": ["object", "null"],
+                          "properties": {
+                            "snapshotId": { "type": "integer" },
+                            "scannedAt": { "type": "string", "format": "date-time" },
+                            "scannerVersion": { "type": "string" },
+                            "scoringVersion": { "type": "string" }
+                          }
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -408,6 +459,174 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/history": {
+      "get": {
+        "operationId": "getSnapshotHistory",
+        "summary": "List past snapshots for a domain (free)",
+        "description": "Lists stored snapshot summary rows for a domain, newest first. Returns ONLY summary columns that map 1:1 to fields already present in the GET /snapshot/run response, plus operational provenance metadata (scanner_version, scoring_version, status). The raw snapshot payload is never returned. Partial/failed observations ARE listed (visible in history) but are never used as comparison anchors.",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "query",
+            "required": true,
+            "description": "Hostname the history is keyed on (e.g. example.com).",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Maximum rows (default 10, max 100).",
+            "schema": { "type": "integer", "default": 10, "maximum": 100 }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "description": "Optional ISO-8601 timestamp cursor; returns rows strictly older than this (stable pagination).",
+            "schema": { "type": "string", "format": "date-time" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Snapshot history summary rows for the domain, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["domain", "snapshots"],
+                  "properties": {
+                    "domain": { "type": "string" },
+                    "snapshots": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "snapshotId": { "type": "integer" },
+                          "domain": { "type": "string" },
+                          "scannedAt": { "type": "string", "format": "date-time" },
+                          "scannerVersion": { "type": "string" },
+                          "scoringVersion": { "type": "string" },
+                          "status": { "type": "string", "enum": ["complete", "partial", "failed"] },
+                          "httpStatus": { "type": ["integer", "null"] },
+                          "usedHttps": { "type": "boolean" },
+                          "tlsProtocol": { "type": ["string", "null"] },
+                          "weakCipher": { "type": "boolean" },
+                          "headerScore": { "type": "integer" },
+                          "headerGrade": { "type": "string" },
+                          "verdictStatus": { "type": "string", "enum": ["PASS", "WARN", "FAIL"] },
+                          "verdictScore": { "type": "integer" }
+                        }
+                      }
+                    },
+                    "nextBefore": { "type": ["string", "null"], "description": "Present when the limit was reached; pass as `before` to fetch the next page." }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing required `domain` query parameter"
+          }
+        }
+      }
+    },
+    "/changes": {
+      "get": {
+        "operationId": "getDomainChanges",
+        "summary": "List detected changes for a domain (free)",
+        "description": "Lists stored change records for a domain, newest first. Every entry exposes its provenance (from/to scanner_version + scoring_version), comparable flag, and reason — an agent can independently tell a real comparison from a scanner/scoring-model evolution without internal knowledge of the versioning scheme.",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "query",
+            "required": true,
+            "description": "Hostname the change history is keyed on (e.g. example.com).",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Maximum rows (default 10, max 100).",
+            "schema": { "type": "integer", "default": 10, "maximum": 100 }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "description": "Optional ISO-8601 timestamp cursor; returns rows strictly older than this (stable pagination).",
+            "schema": { "type": "string", "format": "date-time" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detected changes for the domain, newest first, with mandatory provenance.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["domain", "changes"],
+                  "properties": {
+                    "domain": { "type": "string" },
+                    "changes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "changeId": { "type": "integer" },
+                          "domain": { "type": "string" },
+                          "detectedAt": { "type": "string", "format": "date-time" },
+                          "comparable": { "type": "boolean" },
+                          "reason": { "type": "string" },
+                          "materiality": { "type": ["string", "null"], "enum": ["critical", "material", "informational"] },
+                          "changedFields": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "field": { "type": "string" },
+                                "from": {},
+                                "to": {},
+                                "materiality": { "type": "string", "enum": ["critical", "material", "informational"] }
+                              }
+                            }
+                          },
+                          "scoreDelta": { "type": ["integer", "null"] },
+                          "verdictMoved": { "type": "boolean" },
+                          "from": {
+                            "type": "object",
+                            "properties": {
+                              "snapshotId": { "type": "integer" },
+                              "scannedAt": { "type": "string", "format": "date-time" },
+                              "scannerVersion": { "type": "string" },
+                              "scoringVersion": { "type": "string" }
+                            }
+                          },
+                          "to": {
+                            "type": "object",
+                            "properties": {
+                              "snapshotId": { "type": "integer" },
+                              "scannedAt": { "type": "string", "format": "date-time" },
+                              "scannerVersion": { "type": "string" },
+                              "scoringVersion": { "type": "string" }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "nextBefore": { "type": ["string", "null"], "description": "Present when the limit was reached; pass as `before` to fetch the next page." }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing required `domain` query parameter"
           }
         }
       }

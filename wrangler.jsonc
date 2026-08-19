@@ -33,5 +33,15 @@
       "namespace_id": "1002",
       "simple": { "limit": 20, "period": 60 }
     }
+  ],
+  "d1_databases": [
+    {
+      // Cycle 2 history/change-detection store (sitehealth v2).
+      // Provisioned 19 Aug 2026 via `wrangler d1 create` (region WEUR) under
+      // the Qzenta account; schema applied via `wrangler d1 migrations apply`.
+      "binding": "HISTORY_DB",
+      "database_name": "qzenta-sitehealth-history",
+      "database_id": "f75cc7c4-33a9-4e83-950f-fb7280747fe3"
+    }
   ]
 }

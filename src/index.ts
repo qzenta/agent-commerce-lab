@@ -6,6 +6,12 @@ import {
   runBatchSnapshots,
   validateBatchDomains,
 } from "./batch";
+import {
+  listChangeHistory,
+  listSnapshotHistory,
+  parseListLimit,
+  runSnapshotWithHistory,
+} from "./history";
 // Single source of truth for the spec lives in docs/agent-commerce/ (human +
 // agent-facing docs); imported here so the served copy can't drift from it.
 import openApiSpec from "../docs/agent-commerce/openapi.json";
@@ -15,6 +21,7 @@ type Bindings = {
   X402_PAY_TO: `0x${string}`;
   DISCOVERY_RATE_LIMITER: RateLimit;
   SNAPSHOT_RATE_LIMITER: RateLimit;
+  HISTORY_DB: D1Database;
 };
 
 // Variables: per-request context stashed by middlewares for later
@@ -65,6 +72,10 @@ function rateLimitByIp(
 
 app.use("/", rateLimitByIp((env) => env.DISCOVERY_RATE_LIMITER));
 app.use("/snapshot/*", rateLimitByIp((env) => env.SNAPSHOT_RATE_LIMITER));
+// Free read endpoints for history/change detection — cheap reads that could
+// otherwise be scraped at volume, so they reuse the discovery bucket.
+app.use("/history/*", rateLimitByIp((env) => env.DISCOVERY_RATE_LIMITER));
+app.use("/changes/*", rateLimitByIp((env) => env.DISCOVERY_RATE_LIMITER));
 
 // Unpaid: service description for agent discovery. Lets an agent (or a
 // human) see what this endpoint does and what it costs before paying.
@@ -79,6 +90,8 @@ app.get("/", (c) => {
     endpoints: [
       "GET /snapshot/run?url=<target> — single domain, $0.01",
       "POST /snapshot/batch — 2-20 domains in one paid call, $0.01 per domain",
+      "GET /history?domain=<host> — past snapshots for a domain (free)",
+      "GET /changes?domain=<host> — detected changes for a domain (free)",
     ],
     price: "$0.01 test USDC (base-sepolia — no real funds)",
     network: c.env.X402_NETWORK,
@@ -173,7 +186,57 @@ app.get("/snapshot/run", async (c) => {
   }
 
   const snapshot = await runSecuritySnapshot(target);
+
+  // Cycle 2: opt-in history/change detection. Only the exact value "true"
+  // enables it; anything else (absent, "false", "1", ...) takes the original
+  // code path below, which is byte-for-byte unchanged from pre-Cycle-2.
+  if (c.req.query("history") === "true") {
+    const change = await runSnapshotWithHistory(c.env.HISTORY_DB, snapshot);
+    return c.json({ ...snapshot, change });
+  }
+
   return c.json(snapshot);
+});
+
+// Free read endpoints — summary columns + provenance only (Gate 0 Q6 intent
+// reading). Partial/failed observations ARE listed; they are simply never
+// selected as comparison anchors.
+app.get("/history", async (c) => {
+  const domain = c.req.query("domain");
+  if (!domain) {
+    return c.json({ error: "missing required query param: domain" }, 400);
+  }
+  try {
+    const result = await listSnapshotHistory(
+      c.env.HISTORY_DB,
+      domain,
+      parseListLimit(c.req.query("limit")),
+      c.req.query("before") ?? undefined
+    );
+    return c.json({ domain: result.domain, snapshots: result.items, ...(result.nextBefore ? { nextBefore: result.nextBefore } : {}) });
+  } catch (err) {
+    console.log(JSON.stringify({ event: "history_read_failed", endpoint: "history", domain, error: err instanceof Error ? err.message : String(err) }));
+    return c.json({ error: "history storage unavailable" }, 500);
+  }
+});
+
+app.get("/changes", async (c) => {
+  const domain = c.req.query("domain");
+  if (!domain) {
+    return c.json({ error: "missing required query param: domain" }, 400);
+  }
+  try {
+    const result = await listChangeHistory(
+      c.env.HISTORY_DB,
+      domain,
+      parseListLimit(c.req.query("limit")),
+      c.req.query("before") ?? undefined
+    );
+    return c.json({ domain: result.domain, changes: result.items, ...(result.nextBefore ? { nextBefore: result.nextBefore } : {}) });
+  } catch (err) {
+    console.log(JSON.stringify({ event: "history_read_failed", endpoint: "changes", domain, error: err instanceof Error ? err.message : String(err) }));
+    return c.json({ error: "history storage unavailable" }, 500);
+  }
 });
 
 // Batch/portfolio scan — 2-20 domains in one paid call. The body middleware
