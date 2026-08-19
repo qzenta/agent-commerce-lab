@@ -36,15 +36,12 @@
   ],
   "d1_databases": [
     {
-      // Cycle 2 history/change-detection store (sitehealth v2). The
-      // database_id below is a LOCAL-DEV placeholder (all-zero UUID) — the
-      // real Cloudflare D1 database must be provisioned by a human and its id
-      // set here before any deploy. DSH has no D1 provisioning/deploy access
-      // (Cycle 2 execution boundary); miniflare uses this id only to name the
-      // local sqlite file.
+      // Cycle 2 history/change-detection store (sitehealth v2).
+      // Provisioned 19 Aug 2026 via `wrangler d1 create` (region WEUR) under
+      // the Qzenta account; schema applied via `wrangler d1 migrations apply`.
       "binding": "HISTORY_DB",
       "database_name": "qzenta-sitehealth-history",
-      "database_id": "00000000-0000-0000-0000-000000000000"
+      "database_id": "f75cc7c4-33a9-4e83-950f-fb7280747fe3"
     }
   ]
 }
