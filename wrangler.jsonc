@@ -33,5 +33,18 @@
       "namespace_id": "1002",
       "simple": { "limit": 20, "period": 60 }
     }
+  ],
+  "d1_databases": [
+    {
+      // Cycle 2 history/change-detection store (sitehealth v2). The
+      // database_id below is a LOCAL-DEV placeholder (all-zero UUID) — the
+      // real Cloudflare D1 database must be provisioned by a human and its id
+      // set here before any deploy. DSH has no D1 provisioning/deploy access
+      // (Cycle 2 execution boundary); miniflare uses this id only to name the
+      // local sqlite file.
+      "binding": "HISTORY_DB",
+      "database_name": "qzenta-sitehealth-history",
+      "database_id": "00000000-0000-0000-0000-000000000000"
+    }
   ]
 }
