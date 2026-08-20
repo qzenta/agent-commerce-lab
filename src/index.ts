@@ -28,7 +28,7 @@ type Bindings = {
 // middlewares/handlers (the batch body is read exactly once).
 type AppEnv = {
   Bindings: Bindings;
-  Variables: { batchDomains?: string[] };
+  Variables: { batchDomains?: string[]; batchContent?: boolean };
 };
 
 const app = new Hono<AppEnv>();
@@ -89,7 +89,8 @@ app.get("/", (c) => {
     endpoint: "GET /snapshot?url=<target>",
     endpoints: [
       "GET /snapshot/run?url=<target> — single domain, $0.01",
-      "POST /snapshot/batch — 2-20 domains in one paid call, $0.01 per domain",
+      "GET /snapshot/run?url=<target>&content=true — single domain + content-accuracy sub-scan (regulatory figures, cross-page contradictions), $0.01",
+      "POST /snapshot/batch — 2-20 domains in one paid call, $0.01 per domain (add \"content\": true for per-domain content sub-scans)",
       "GET /history?domain=<host> — past snapshots for a domain (free)",
       "GET /changes?domain=<host> — detected changes for a domain (free)",
     ],
@@ -124,6 +125,7 @@ app.use("/snapshot/batch", async (c, next) => {
     return c.json({ error: validation.error }, 400);
   }
   c.set("batchDomains", validation.domains);
+  c.set("batchContent", validation.content);
   return next();
 });
 
@@ -185,7 +187,12 @@ app.get("/snapshot/run", async (c) => {
     return c.json({ error: "missing required query param: url" }, 400);
   }
 
-  const snapshot = await runSecuritySnapshot(target);
+  // v2: the content-accuracy sub-scan is opt-in via content=true and is
+  // independent of the history opt-in below (both may be enabled together).
+  const snapshot = await runSecuritySnapshot(target, {
+    content: c.req.query("content") === "true",
+    groundTruthDb: c.env.HISTORY_DB,
+  });
 
   // Cycle 2: opt-in history/change detection. Only the exact value "true"
   // enables it; anything else (absent, "false", "1", ...) takes the original
@@ -248,7 +255,12 @@ app.post("/snapshot/batch", async (c) => {
   if (!domains || domains.length === 0) {
     return c.json({ error: "invalid batch request" }, 400);
   }
-  return c.json(await runBatchSnapshots(domains));
+  return c.json(
+    await runBatchSnapshots(domains, {
+      content: c.get("batchContent") ?? false,
+      groundTruthDb: c.env.HISTORY_DB,
+    })
+  );
 });
 
 export default app;

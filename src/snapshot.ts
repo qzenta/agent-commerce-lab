@@ -11,6 +11,8 @@ import { checkDnsRecords, type DnsCheckResult } from "./dns-check";
 import { probeTls, type TlsProbeResult } from "./tls-probe";
 import { scoreSecurityHeaders, type HeaderScore } from "./header-scoring";
 import { buildVerdict, type Verdict } from "./verdict";
+import { runContentCheck, type ContentResult } from "./content-check";
+import { loadActiveFacts, loadFactPatterns, loadSupersededFacts } from "./ground-truth";
 
 const FETCH_TIMEOUT_MS = 8000;
 
@@ -50,6 +52,8 @@ export interface SecuritySnapshot {
   };
   findings: string[];
   verdict: Verdict;
+  /** Present only when the request enabled the content-accuracy sub-scan (v2). */
+  content?: ContentResult;
 }
 
 /** Follows redirects manually (capped) so we can report the chain. */
@@ -123,7 +127,16 @@ function guessCms(headers: Headers, body: string): string | null {
   return null;
 }
 
-export async function runSecuritySnapshot(rawUrl: string): Promise<SecuritySnapshot> {
+export interface SnapshotOptions {
+  /** When true, run the site-scoped content-accuracy sub-scan (v2). */
+  content?: boolean;
+  /** D1 binding backing the ground-truth store (SELECT-only). */
+  groundTruthDb?: D1Database;
+  /** Injectable fetch (tests); defaults to the platform fetch. */
+  fetchFn?: typeof fetch;
+}
+
+export async function runSecuritySnapshot(rawUrl: string, opts?: SnapshotOptions): Promise<SecuritySnapshot> {
   const timestamp = new Date().toISOString();
   let target: string;
 
@@ -229,7 +242,7 @@ export async function runSecuritySnapshot(rawUrl: string): Promise<SecuritySnaps
     findings.push(`[${issue.severity}] ${issue.header}: ${issue.message}`);
   }
 
-  const verdict = buildVerdict({
+  const baseVerdict = buildVerdict({
     httpOk: response.ok,
     httpError: null,
     usedHttps,
@@ -237,7 +250,7 @@ export async function runSecuritySnapshot(rawUrl: string): Promise<SecuritySnaps
     tls,
   });
 
-  return {
+  const snapshot: SecuritySnapshot = {
     target,
     timestamp,
     http: {
@@ -272,8 +285,61 @@ export async function runSecuritySnapshot(rawUrl: string): Promise<SecuritySnaps
       cmsGuess,
     },
     findings,
-    verdict,
+    verdict: baseVerdict,
   };
+
+  // v2 content-accuracy sub-scan — opt-in, site-scoped. Runs after the base
+  // snapshot so discovery is anchored on the post-redirect final URL. The
+  // verdict is rebuilt content-aware (D4 hard cap propagates via min()).
+  if (opts?.content && opts.groundTruthDb) {
+    try {
+      const asOf = new Date().toISOString().slice(0, 10);
+      const facts = await loadActiveFacts(opts.groundTruthDb, "ZA", asOf);
+      const superseded = await loadSupersededFacts(opts.groundTruthDb, "ZA", asOf);
+      const patterns = await loadFactPatterns(
+        opts.groundTruthDb,
+        facts.map((f) => f.factKey)
+      );
+      const content = await runContentCheck({
+        originUrl: finalUrl ?? target,
+        fetchFn: opts.fetchFn ?? fetch,
+        facts,
+        superseded,
+        patterns,
+        asOf,
+      });
+      snapshot.content = content;
+      snapshot.verdict = buildVerdict({
+        httpOk: response.ok,
+        httpError: null,
+        usedHttps,
+        headerScore,
+        tls,
+        content: {
+          score: content.score,
+          grade: content.grade,
+          status: content.status,
+          topFindings: content.findings
+            .slice(0, 5)
+            .map((f) => `[${f.severity}] ${f.message}`),
+        },
+      });
+    } catch (err) {
+      // Content is auxiliary to the settled snapshot: a ground-truth/storage
+      // failure degrades loudly in the findings list but never fails the scan
+      // (same locked decision as Cycle 2's D1-failure path).
+      snapshot.findings.push("Content scan skipped: ground-truth store unavailable.");
+      console.log(
+        JSON.stringify({
+          event: "content_scan_failed",
+          target,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      );
+    }
+  }
+
+  return snapshot;
 }
 
 function emptyDns(): DnsCheckResult {

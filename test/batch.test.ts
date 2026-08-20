@@ -156,6 +156,26 @@ describe("validateBatchDomains", () => {
       validateBatchDomains({ domains: ["https://a.com", " https://a.com "] }).ok
     ).toBe(false);
   });
+
+  it("accepts the optional boolean content flag and defaults it to false", () => {
+    const yes = validateBatchDomains({ domains: ["https://a.com", "https://b.com"], content: true });
+    expect(yes.ok).toBe(true);
+    if (yes.ok) expect(yes.content).toBe(true);
+
+    const no = validateBatchDomains({ domains: ["https://a.com", "https://b.com"] });
+    expect(no.ok).toBe(true);
+    if (no.ok) expect(no.content).toBe(false);
+
+    const explicitFalse = validateBatchDomains({ domains: ["https://a.com", "https://b.com"], content: false });
+    expect(explicitFalse.ok).toBe(true);
+    if (explicitFalse.ok) expect(explicitFalse.content).toBe(false);
+  });
+
+  it("rejects a non-boolean content flag", () => {
+    expect(validateBatchDomains({ domains: ["https://a.com", "https://b.com"], content: "yes" }).ok).toBe(false);
+    expect(validateBatchDomains({ domains: ["https://a.com", "https://b.com"], content: 1 }).ok).toBe(false);
+    expect(validateBatchDomains({ domains: ["https://a.com", "https://b.com"], content: null }).ok).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

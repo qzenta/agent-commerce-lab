@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildVerdict } from "../src/verdict";
 import { scoreSecurityHeaders } from "../src/header-scoring";
 import type { TlsProbeResult } from "../src/tls-probe";
+import type { ContentVerdictInput } from "../src/verdict";
 
 const goodHeaders = scoreSecurityHeaders({
   usedHttps: true,
@@ -79,5 +80,55 @@ describe("buildVerdict", () => {
   it("summary always mentions the header grade", () => {
     const verdict = buildVerdict({ httpOk: true, httpError: null, usedHttps: true, headerScore: goodHeaders, tls: strongTls });
     expect(verdict.summary).toContain(goodHeaders.grade);
+  });
+
+  // --- content dimension (v2) ---
+
+  function content(overrides: Partial<ContentVerdictInput>): ContentVerdictInput {
+    return { score: 100, grade: "A", status: "PASS", topFindings: [], ...overrides };
+  }
+
+  it("stays PASS when both dimensions are clean", () => {
+    const verdict = buildVerdict({
+      httpOk: true, httpError: null, usedHttps: true, headerScore: goodHeaders, tls: strongTls,
+      content: content({}),
+    });
+    expect(verdict.status).toBe("PASS");
+    expect(verdict.summary).toContain("Content grade A");
+  });
+
+  it("forces FAIL via the D4 cap: a capped content score (35) with perfect headers is still FAIL", () => {
+    // content.score 35 = the D4-capped value (critical money/deadline finding).
+    const verdict = buildVerdict({
+      httpOk: true, httpError: null, usedHttps: true, headerScore: goodHeaders, tls: strongTls,
+      content: content({ score: 35, grade: "D", status: "FAIL", topFindings: ["[critical] UIF ceiling wrong"] }),
+    });
+    expect(verdict.score).toBeLessThanOrEqual(35);
+    expect(verdict.status).toBe("FAIL");
+    expect(verdict.topIssues.some((i) => i.includes("critical"))).toBe(true);
+  });
+
+  it("turns a WARN content dimension into a WARN verdict even with a perfect header score", () => {
+    const verdict = buildVerdict({
+      httpOk: true, httpError: null, usedHttps: true, headerScore: goodHeaders, tls: strongTls,
+      content: content({ score: 60, grade: "C", status: "WARN", topFindings: ["[material] VAT threshold stale"] }),
+    });
+    expect(verdict.status).toBe("WARN");
+    expect(verdict.score).toBeLessThanOrEqual(60);
+  });
+
+  it("blends via min: a weak header score also pulls the content-aware verdict down", () => {
+    const verdict = buildVerdict({
+      httpOk: true, httpError: null, usedHttps: true, headerScore: badHeaders, tls: strongTls,
+      content: content({ score: 90, grade: "A", status: "PASS" }),
+    });
+    expect(verdict.status).toBe("FAIL"); // badHeaders score is well below 40 regardless of content
+    expect(verdict.score).toBeLessThan(40);
+  });
+
+  it("keeps the existing summary format when no content block is supplied (byte-identical v1)", () => {
+    const verdict = buildVerdict({ httpOk: true, httpError: null, usedHttps: true, headerScore: goodHeaders, tls: strongTls });
+    expect(verdict.summary).not.toContain("Content grade");
+    expect(verdict.summary).toContain("Header grade");
   });
 });
