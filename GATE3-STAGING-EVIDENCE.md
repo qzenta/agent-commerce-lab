@@ -117,15 +117,12 @@ findings:
 | informational | absent-required-figure | UIF ceiling | `/`, `/services`, `/pricing` mention UIF with no figure |
 | informational | absent-required-figure | EMP501 | `/`, `/about`, `/pricing`, `/tools/tax-calculator` mention EMP501 with no figure |
 
-**Content-judgment item for you (human-only rule):** the "177" claims come from the tax
-calculator's Key Numbers card — *"UIF rate capped at R177/month 1%"* — alongside the correct
-explanation *"capped at a monthly remuneration of R17,712, meaning the maximum employee UIF per
-month is R177.12"*. R177.12 is the mathematically correct 1% contribution cap; the extraction
-correctly reports that the terse card states "R177" in a "capped at" context. **Whether that card
-is a compliance defect (a reader could misread the ceiling as R177) is your call — DSH flags,
-you rule.** If you rule it clean, the clean fix is a new approved fact
-("UIF maximum monthly contribution = 177.12 ZAR/month") so the card matches ground truth — data
-addition, needs your approval, not a scanner change.
+**Content-judgment item — RULING (Daniel, 20 Aug 2026): keep flagging.** The "177" claims come
+from the tax calculator's Key Numbers card — *"UIF rate capped at R177/month 1%"* — alongside the
+correct explanation *"capped at a monthly remuneration of R17,712, meaning the maximum employee
+UIF per month is R177.12"*. R177.12 is the mathematically correct 1% contribution cap; the
+extraction correctly reports that the terse card states "R177" in a "capped at" context. **Ruling:
+the finding stays** — no new fact, no scanner change; the card is a site-owner wording fix.
 
 No other findings: no VAT/ROE/EMP501 figure claims on the 10 crawled pages (the crawl's first-10
 sitemap pages don't include the VAT/ROE articles — bounded-crawl scope, noted).
@@ -175,9 +172,11 @@ a snapshot + (on second run) a change record to the staging D1.
 
 ---
 
-## 8. Requested decisions
+## 8. Decisions — status
 
-1. **§6 payment path** (A/B/C) for the paid-endpoint exercise.
-2. **§5 judgment:** is the "UIF rate capped at R177/month" card a defect (→ approve the new
-   "UIF maximum monthly contribution" fact), or clean as-is?
-3. Whether staging passes Gate 3 → then Gate 4 (production) as a separate decision.
+1. **§6 payment path: RESOLVED (20 Aug 2026) — option A.** Daniel runs the two paid scans
+   against the staging URL with his own wallet and shares the responses; DSH reconciles them
+   against the §4/§5 local findings. Commands in §6.
+2. **§5 R177 judgment: RESOLVED — keep flagging** (no new fact, no scanner change).
+3. **Gate 3 → Gate 4 decision: OPEN** — pending the paid-scan reconciliation (§6 option A) and
+   your reproduction pass (source diff via PR #3, live HTTP probes against the staging URL).
