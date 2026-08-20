@@ -252,21 +252,38 @@ Per monitored site/month at **pilot scale (1–3 sites)**, using actual current 
 | Model/API | **R0** | Deterministic regex extraction; no LLM/Ollama anywhere [CONFIRMED] |
 | Storage (D1) | <R1 | ~5–10 KB raw per snapshot; weekly → tens of KB/month/site [CONFIRMED scale] |
 | Notifications | R0 at pilot scale | webhook → email provider free tier (~100–300 emails/mo); provider choice UNKNOWN |
-| **Human verification** | **R250–450** (0.75–1.25 h at R400/h internal blended) | agent-assisted evidence prep + Daniel/DSH rulings + quarterly ground-truth review (shared) + report review; the dominant cost — tracks FP rate directly |
+| **Human verification** | **R250–450** (≈0.6–1.1 h/site-month at R400/h internal blended: 0.625 h×R400 = R250, 1.125 h×R400 = R450) | agent-assisted evidence prep + Daniel/DSH rulings + quarterly ground-truth review (shared) + report review; the dominant cost — tracks FP rate directly |
 | Remediation | R0 | excluded from the subscription (separately priced) |
 | Support | R0–100 | Daniel-led at pilot scale |
 
-**Approximate gross margin per site/month (hypotheses, pilot scale):**
-- **R299 (Basic):** likely **negative to ~break-even** (−15% to +5%) — Basic's thin price cannot
-  cover the verification cost at pilot scale.
-- **R499 (Professional):** roughly **+5% to +40%** depending on actual verification hours; viable
-  only if verification stays agent-assisted and the FP rate falls (pattern tuning + rulings).
+**Gross margin per site/month — actual calculation (hypotheses; bands from the table above).**
+Cost totals: **best = R252.50** (R2 + R0.50 storage + R250 + R0 support), **typical = R404.00**
+(midpoints: R3.50 + R0.50 + R350 + R50), **worst = R556.00** (R5 + R1 + R450 + R100).
+
+| Scenario | Cost/site-month | Margin @ **R499** | Margin @ **R299** |
+|---|---|---|---|
+| Best (min costs) | R252.50 | (499−252.50)/499 = **+49%** | (299−252.50)/299 = **+16%** |
+| Typical (midpoints — assumed scenario) | R404.00 | (499−404)/499 = **+19%** | (299−404)/299 = **−35%** |
+| Worst (max costs) | R556.00 | (499−556)/499 = **−11%** | (299−556)/299 = **−86%** |
+
+**Corrected stated ranges (true extremes of the given bands):** R499 → **−11% to +49%**; R299 →
+**−86% to +16%**. *(The earlier "+5% to +40%" and "−15% to +5%" in this report were an unstated
+mid-scenario blend and are wrong as extremes — superseded by this table. The typical scenario is
+explicitly assumed as the midpoint blend, R404/site-month.)*
+
+- **R499 (Professional):** typical **+19%**, worst-case −11% — viable at pilot scale only if
+  actual verification hours land near the typical band (the pilot measures this).
+- **R299 (Basic):** typical **−35%**, best-case only +16% — **structurally unviable at pilot
+  scale with the current verification practice**; Basic should be a lower-verification tier
+  (e.g., no per-finding review) or deferred until FP automation cuts the cost band.
 - At **10+ sites** (GA), fixed costs amortise and shared ground truth + lower FP → margins
   structurally higher.
 
-**Honest conclusion:** at pilot scale the service is marginally profitable at R499 at best — the
-pilot's purpose is to *measure* actual verification hours and WTP so the price/automation
-question is answered with data, not assumption. The FP-review scaffold is the margin lever:
+**Honest conclusion:** at R499 the typical pilot-scale case is positive but thin (+19%), with a
+−11% worst case; at R299 it is negative in the typical case. The pilot must *measure* actual
+verification hours per site-month (the swing between best and worst is ~R300/site-month — bigger
+than the price difference) and actual WTP; that measurement converts the hypothesis into a
+number. The FP-review scaffold is the margin lever:
 every FP removed cuts paid human time. [All figures PROPOSED hypotheses with the assumptions
 above; infra facts CONFIRMED.]
 
@@ -374,7 +391,7 @@ investment: the §13 commercial metrics (esp. renewal + WTP) and the measured §
 | Pilot candidate | Rank-1 SME accounting practice, discovered via public-website research (§4, §19) | Daniel |
 | Pilot duration | 30 days (§12) | Daniel |
 | Pilot scope | Professional, 1 site, monitoring + alerts + report; remediation excluded (§7) | Daniel |
-| Pricing hypothesis | R499/site/month Professional pilot rate, R299 Basic (hypotheses only, unpublished) (§9) | Daniel |
+| Pricing hypothesis | R499/site/month Professional pilot rate, R299 Basic (hypotheses only, unpublished). **Status: on hold pending the §14 economics reconciliation — resolved in this revision** (§14 now shows the true band −11% to +49% at R499 with a +19% typical scenario; R299 typical −35% is structurally unviable at pilot scale). Reconfirm the R499 pilot rate before external communication (§9, §14) | Daniel |
 | Customer-facing material | Polished Passport report from existing endpoints; no portal (§8) | Daniel |
 | Payment method | Invoice/EFT for the pilot (§18) | Daniel |
 | Additional DSH build | P0 only: onboarding runbook, alert webhook config, invoice template (§16) | Daniel |
