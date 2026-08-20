@@ -3,6 +3,10 @@
 **SiteHealth Passport v2 — P0 build, per Gate 0 scope + Gate 1 rulings (D1–D4)**
 **Status:** GATE 2 COMPLETE — build + evidence submitted. No deploy, no staging, no remote D1
 write performed (all are Gate 3 items requiring separate approval).
+**PR:** https://github.com/qzenta/agent-commerce-lab/pull/3 (branch `dsh/v2-content-accuracy`).
+**Gate 2 review (20 Aug 2026):** deviations #2–#6 APPROVED as disclosed; test count reconciled
+exactly (§2 below: +61 = 44 new + 17 added to existing; the earlier "40 new" figure was wrong and
+is corrected here).
 **Built by:** DSH in `C:\dsh-lab\sitehealth-recon` (agent-commerce-lab clone, branch `main`).
 
 ---
@@ -104,10 +108,12 @@ Environment notes for reproducibility (not code issues):
 1. **D4 hard cap placement:** implemented in `scoreContent` (content dimension) and propagates to
    the verdict via `min()` — exactly as the ruling specified; plus explicit assertion coverage of
    both layers. No deviation in behavior.
-2. **Content dimension status rule (refinement, flagged for review):** PASS additionally requires
+2. **Content dimension status rule (refinement):** PASS additionally requires
    **no material-or-worse findings** (not just score ≥75). Without this, a single wrong VAT
    threshold (−15 → score 85) would read PASS. With it: material → WARN, critical → FAIL (D4).
-   This tightens §4 step 6 of the plan; flagged for Daniel's confirmation at Gate 3.
+   **APPROVED at Gate 2 review** — and as Daniel noted, this is not actually a deviation:
+   `verdict.ts`'s existing security-side PASS rule already requires score ≥75 AND zero issues,
+   so the content dimension now uses the same rule as the security dimension.
 3. **figure-stale:** machinery built and proven with synthetic superseded rows, but **no
    superseded rows are seeded in P0** — no attested effective-date boundary beyond the five
    approved facts exists in our sources. Pre-1-Apr-2026 values (e.g. R1,000,000 VAT threshold)
