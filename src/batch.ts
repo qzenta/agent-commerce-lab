@@ -40,13 +40,14 @@ export function formatBatchPrice(domainCount: number): string {
 }
 
 export type BatchBodyValidation =
-  | { ok: true; domains: string[] }
+  | { ok: true; domains: string[]; content: boolean }
   | { ok: false; error: string };
 
 /**
  * Validates the POST /snapshot/batch request body. Enforces the 2-20 domain
- * range, string/arity/duplicate rules, and returns trimmed values. Any
- * failure is a request-level 400 issued BEFORE the payment gate runs.
+ * range, string/arity/duplicate rules, the optional boolean `content` flag,
+ * and returns trimmed values. Any failure is a request-level 400 issued BEFORE
+ * the payment gate runs.
  */
 export function validateBatchDomains(body: unknown): BatchBodyValidation {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -69,7 +70,11 @@ export function validateBatchDomains(body: unknown): BatchBodyValidation {
   if (new Set(trimmed).size !== trimmed.length) {
     return { ok: false, error: "domains must not contain duplicates" };
   }
-  return { ok: true, domains: trimmed };
+  const content = (body as { content?: unknown }).content;
+  if (content !== undefined && typeof content !== "boolean") {
+    return { ok: false, error: "content, when present, must be a boolean" };
+  }
+  return { ok: true, domains: trimmed, content: content === true };
 }
 
 /** Input-level URL check — same contract runSecuritySnapshot enforces. */
@@ -85,19 +90,34 @@ function parseHttpUrl(domain: string): { ok: true } | { ok: false; error: string
   }
 }
 
-async function scanOne(domain: string): Promise<BatchResultItem> {
+async function scanOne(domain: string, opts?: RunBatchOptions): Promise<BatchResultItem> {
   const urlCheck = parseHttpUrl(domain);
   if (!urlCheck.ok) {
     return { domain, ok: false, error: urlCheck.error };
   }
   try {
-    const snapshot = await runSecuritySnapshot(domain);
+    const snapshot = await runSecuritySnapshot(domain, {
+      content: opts?.content ?? false,
+      groundTruthDb: opts?.groundTruthDb,
+      fetchFn: opts?.fetchFn,
+    });
     return { domain, ok: true, snapshot };
   } catch (err) {
     // runSecuritySnapshot is designed never to throw; this is a defensive
     // backstop so one unexpected failure can never sink the whole batch.
     return { domain, ok: false, error: err instanceof Error ? err.message : "snapshot failed" };
   }
+}
+
+export interface RunBatchOptions {
+  concurrency?: number;
+  deadlineMs?: number;
+  /** When true, each domain's snapshot also runs the content-accuracy sub-scan. */
+  content?: boolean;
+  /** D1 binding backing the ground-truth store (SELECT-only). */
+  groundTruthDb?: D1Database;
+  /** Injectable fetch (tests); defaults to the platform fetch. */
+  fetchFn?: typeof fetch;
 }
 
 /**
@@ -110,7 +130,7 @@ async function scanOne(domain: string): Promise<BatchResultItem> {
  */
 export async function runBatchSnapshots(
   domains: string[],
-  opts?: { concurrency?: number; deadlineMs?: number }
+  opts?: RunBatchOptions
 ): Promise<BatchResponse> {
   const concurrency = Math.max(1, Math.min(opts?.concurrency ?? BATCH_CONCURRENCY, domains.length));
   const deadlineMs = opts?.deadlineMs ?? BATCH_DEADLINE_MS;
@@ -126,7 +146,7 @@ export async function runBatchSnapshots(
         results[index] = { domain: domains[index], ok: false, error: "batch deadline exceeded" };
         continue;
       }
-      results[index] = await scanOne(domains[index]);
+      results[index] = await scanOne(domains[index], opts);
     }
   };
 

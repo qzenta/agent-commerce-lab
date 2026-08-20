@@ -94,6 +94,13 @@
             "required": false,
             "description": "When exactly \"true\", persists this snapshot to the history store and appends an additive `change` object (version-gated diff vs the most recent prior complete snapshot for the same domain). Absent or any other value: behavior is byte-for-byte unchanged (no persistence, no cost).",
             "schema": { "type": "string", "enum": ["true"] }
+          },
+          {
+            "name": "content",
+            "in": "query",
+            "required": false,
+            "description": "When exactly \"true\", runs the site-scoped content-accuracy sub-scan (bounded crawl up to 10 pages, regulatory-figure extraction, ground-truth comparison, cross-page contradiction detection) and appends a `content` block to the snapshot; the verdict becomes content-aware. A critical finding on a money or compliance-deadline fact caps content.score at 35 (Gate 1 ruling D4), forcing dimension status FAIL. Absent or any other value: content scanning is skipped entirely.",
+            "schema": { "type": "string", "enum": ["true"] }
           }
         ],
         "x-payment-info": {
@@ -223,7 +230,82 @@
                         "cmsGuess": { "type": ["string", "null"] }
                       }
                     },
+                    "headerScore": {
+                      "type": "object",
+                      "description": "Security-header misconfiguration score (0-100) with A-F grade and severity-ranked issues.",
+                      "properties": {
+                        "score": { "type": "integer" },
+                        "grade": { "type": "string" },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "header": { "type": "string" },
+                              "severity": { "type": "string", "enum": ["high", "medium", "low"] },
+                              "message": { "type": "string" }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "verdict": {
+                      "type": "object",
+                      "description": "LLM-consumable pass/fail verdict; content-aware when content=true (a critical money or compliance-deadline finding caps the blended score at 35 -> FAIL, per Gate 1 ruling D4).",
+                      "properties": {
+                        "status": { "type": "string", "enum": ["PASS", "WARN", "FAIL"] },
+                        "score": { "type": "integer" },
+                        "summary": { "type": "string" },
+                        "topIssues": { "type": "array", "items": { "type": "string" } }
+                      }
+                    },
                     "findings": { "type": "array", "items": { "type": "string" } },
+                    "content": {
+                      "type": ["object", "null"],
+                      "description": "Present only when the request included content=true. Site-scoped content-accuracy result: bounded crawl scope, per-fact observations, findings, 0-100 sub-score, grade, and PASS/WARN/FAIL status. A critical finding on a money or compliance-deadline fact caps content.score at 35 (Gate 1 ruling D4), forcing dimension status FAIL.",
+                      "properties": {
+                        "scope": {
+                          "type": "object",
+                          "properties": {
+                            "pagesScanned": { "type": "integer" },
+                            "pagesPlanned": { "type": "integer" },
+                            "sitemapFound": { "type": "boolean" },
+                            "truncated": { "type": "boolean" }
+                          }
+                        },
+                        "facts": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "claims": { "type": "array", "items": { "type": "string" } },
+                              "pages": { "type": "array", "items": { "type": "string" } },
+                              "impact": { "type": "string" }
+                            }
+                          }
+                        },
+                        "findings": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": { "type": "string" },
+                              "factKey": { "type": "string" },
+                              "severity": { "type": "string" },
+                              "confidence": { "type": "string" },
+                              "pagePath": { "type": ["string", "null"] },
+                              "claim": { "type": ["string", "null"] },
+                              "groundTruth": { "type": ["string", "null"] },
+                              "supersededBy": { "type": ["string", "null"] },
+                              "message": { "type": "string" }
+                            }
+                          }
+                        },
+                        "score": { "type": "integer" },
+                        "grade": { "type": "string" },
+                        "status": { "type": "string" }
+                      }
+                    },
                     "change": {
                       "type": ["object", "null"],
                       "description": "Present only when the request included history=true. Comparison of this snapshot against the most recent prior complete snapshot for the same domain; non-comparable results (first scan, version mismatch, storage unavailable) are explicit with a reason, never a fabricated delta.",
@@ -313,6 +395,11 @@
                     "maxItems": 20,
                     "description": "2-20 full http(s) URLs to scan. Each domain is individually SSRF-guarded and redirect-revalidated by the shared snapshot pipeline; an invalid or non-http(s) entry is reported as a per-item error, not a batch failure.",
                     "items": { "type": "string", "format": "uri" }
+                  },
+                  "content": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "When true, each domain's snapshot additionally runs the site-scoped content-accuracy sub-scan (content=true semantics per /snapshot/run): regulatory-figure extraction, ground-truth comparison, cross-page contradiction detection."
                   }
                 }
               },
@@ -448,6 +535,35 @@
                                   "cmsGuess": { "type": ["string", "null"] }
                                 }
                               },
+                              "headerScore": {
+                                "type": "object",
+                                "properties": {
+                                  "score": { "type": "integer" },
+                                  "grade": { "type": "string" },
+                                  "issues": { "type": "array", "items": { "type": "object", "properties": { "header": { "type": "string" }, "severity": { "type": "string" }, "message": { "type": "string" } } } }
+                                }
+                              },
+                              "verdict": {
+                                "type": "object",
+                                "properties": {
+                                  "status": { "type": "string", "enum": ["PASS", "WARN", "FAIL"] },
+                                  "score": { "type": "integer" },
+                                  "summary": { "type": "string" },
+                                  "topIssues": { "type": "array", "items": { "type": "string" } }
+                                }
+                              },
+                              "content": {
+                                "type": ["object", "null"],
+                                "description": "Present only when the batch request included content:true. Same shape as GET /snapshot/run's content block.",
+                                "properties": {
+                                  "scope": { "type": "object", "properties": { "pagesScanned": { "type": "integer" }, "pagesPlanned": { "type": "integer" }, "sitemapFound": { "type": "boolean" }, "truncated": { "type": "boolean" } } },
+                                  "facts": { "type": "object" },
+                                  "findings": { "type": "array", "items": { "type": "object" } },
+                                  "score": { "type": "integer" },
+                                  "grade": { "type": "string" },
+                                  "status": { "type": "string" }
+                                }
+                              },
                               "findings": { "type": "array", "items": { "type": "string" } }
                             }
                           },
@@ -519,7 +635,11 @@
                           "headerScore": { "type": "integer" },
                           "headerGrade": { "type": "string" },
                           "verdictStatus": { "type": "string", "enum": ["PASS", "WARN", "FAIL"] },
-                          "verdictScore": { "type": "integer" }
+                          "verdictScore": { "type": "integer" },
+                          "contentScore": { "type": ["integer", "null"] },
+                          "contentGrade": { "type": ["string", "null"] },
+                          "contentStatus": { "type": ["string", "null"] },
+                          "contentPagesScanned": { "type": ["integer", "null"] }
                         }
                       }
                     },

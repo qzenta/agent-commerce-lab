@@ -22,6 +22,7 @@
  */
 
 import type { SecuritySnapshot } from "./snapshot";
+import type { ContentResult } from "./content-check";
 import { SCANNER_VERSION, SCORING_VERSION } from "./versions";
 
 // ---------------------------------------------------------------------------
@@ -81,6 +82,10 @@ export interface SnapshotRowData {
   header_grade: string;
   verdict_status: string;
   verdict_score: number;
+  content_score: number | null;
+  content_grade: string | null;
+  content_status: string | null;
+  content_pages_scanned: number | null;
   raw_snapshot: string;
 }
 
@@ -110,15 +115,23 @@ export function domainKey(target: string): string {
 }
 
 /**
- * Observation-completeness status (Section F). `failed` = target unreachable
- * at all (top-level http.error set). `partial` = the HTTP request succeeded
- * but a subsystem (TLS probe, DNS) did not complete cleanly. `complete`
- * otherwise. This is about observation quality, NOT health: a healthy-looking
- * site with verdict FAIL is still `complete`.
+ * Observation-completeness status (Section F, amended Gate 4 20 Aug 2026).
+ * `failed` = target unreachable at all (top-level http.error set). `partial` =
+ * a subsystem did not complete cleanly. `complete` otherwise. This is about
+ * observation quality, NOT health: a healthy-looking site with verdict FAIL is
+ * still `complete`.
+ *
+ * Gate 4 amendment: a TLS *identification* probe failure is no longer a
+ * `partial` trigger. In the real Workers runtime the raw-socket probe cannot
+ * connect to Cloudflare-owned IP space ("Stream was cancelled" on
+ * Cloudflare-fronted targets — observed in production; example.com probes
+ * cleanly), and the HTTPS fetch has already proven the target speaks TLS. The
+ * probe error stays honestly reported (tls.probeError + a findings note); it
+ * just must not permanently disable change detection for CDN-fronted targets.
  */
 export function snapshotStatus(snapshot: SecuritySnapshot): SnapshotStatus {
   if (snapshot.http.error !== null) return "failed";
-  if (snapshot.tls.probeError !== null || snapshot.dns.note === "not evaluated") return "partial";
+  if (snapshot.dns.note === "not evaluated") return "partial";
   return "complete";
 }
 
@@ -137,6 +150,10 @@ export function snapshotToRow(domain: string, snapshot: SecuritySnapshot): Snaps
     header_grade: snapshot.headerScore.grade,
     verdict_status: snapshot.verdict.status,
     verdict_score: snapshot.verdict.score,
+    content_score: snapshot.content?.score ?? null,
+    content_grade: snapshot.content?.grade ?? null,
+    content_status: snapshot.content?.status ?? null,
+    content_pages_scanned: snapshot.content?.scope.pagesScanned ?? null,
     raw_snapshot: JSON.stringify(snapshot),
   };
 }
@@ -241,6 +258,48 @@ function diffSnapshots(from: SecuritySnapshot, to: SecuritySnapshot): ChangedFie
     add("http.redirectChain.length", from.http.redirectChain.length, to.http.redirectChain.length, "informational");
   }
 
+  // Content dimension (v2) — presence/status/score/fact-level diffs. A
+  // critical content finding (money/deadline class) appearing is critical;
+  // disappearing is material. Score delta |>= 15| is material, mirroring the
+  // existing verdict score-delta rule (Section D).
+  const fromContent = from.content;
+  const toContent = to.content;
+  if (!fromContent && toContent) {
+    add("content", null, toContent, "material"); // dimension added
+  } else if (fromContent && !toContent) {
+    add("content", fromContent, null, "material"); // dimension dropped
+  } else if (fromContent && toContent) {
+    if (fromContent.status !== toContent.status) {
+      add("content.status", fromContent.status, toContent.status, "material");
+    }
+    if (fromContent.score !== toContent.score) {
+      const delta = toContent.score - fromContent.score;
+      add("content.score", fromContent.score, toContent.score, Math.abs(delta) >= 15 ? "material" : "informational");
+    }
+    const factKeys = new Set([...Object.keys(fromContent.facts), ...Object.keys(toContent.facts)]);
+    for (const key of factKeys) {
+      const f = fromContent.facts[key];
+      const t = toContent.facts[key];
+      if (!f && t) {
+        add(`content.facts.${key}`, null, t.claims, t.impact === "money" || t.impact === "compliance-deadline" ? "critical" : "material");
+      } else if (f && !t) {
+        add(`content.facts.${key}`, f.claims, null, f.impact === "money" || f.impact === "compliance-deadline" ? "critical" : "material");
+      } else if (f && t && JSON.stringify(f.claims) !== JSON.stringify(t.claims)) {
+        add(`content.facts.${key}.claims`, f.claims, t.claims, f.impact === "money" || f.impact === "compliance-deadline" ? "critical" : "material");
+      }
+    }
+    const criticalKeys = (c: ContentResult) =>
+      new Set(c.findings.filter((x) => x.severity === "critical").map((x) => `${x.type}:${x.factKey}`));
+    const fc = criticalKeys(fromContent);
+    const tc = criticalKeys(toContent);
+    for (const k of tc) {
+      if (!fc.has(k)) add(`content.critical.${k}`, null, true, "critical");
+    }
+    for (const k of fc) {
+      if (!tc.has(k)) add(`content.critical.${k}`, true, null, "material");
+    }
+  }
+
   return fields;
 }
 
@@ -301,8 +360,8 @@ export function recordMateriality(result: CompareResult): Materiality | null {
 export async function insertSnapshotRow(db: D1Database, data: SnapshotRowData): Promise<number> {
   const res = await db
     .prepare(
-      `INSERT INTO snapshots (domain, scanned_at, scanner_version, scoring_version, status, http_status, used_https, tls_protocol, weak_cipher, header_score, header_grade, verdict_status, verdict_score, raw_snapshot)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`
+      `INSERT INTO snapshots (domain, scanned_at, scanner_version, scoring_version, status, http_status, used_https, tls_protocol, weak_cipher, header_score, header_grade, verdict_status, verdict_score, content_score, content_grade, content_status, content_pages_scanned, raw_snapshot)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)`
     )
     .bind(
       data.domain,
@@ -318,6 +377,10 @@ export async function insertSnapshotRow(db: D1Database, data: SnapshotRowData): 
       data.header_grade,
       data.verdict_status,
       data.verdict_score,
+      data.content_score,
+      data.content_grade,
+      data.content_status,
+      data.content_pages_scanned,
       data.raw_snapshot
     )
     .run();
@@ -370,7 +433,7 @@ export async function listSnapshots(
   before?: string
 ): Promise<Array<Record<string, unknown>>> {
   const base =
-    `SELECT id, domain, scanned_at, scanner_version, scoring_version, status, http_status, used_https, tls_protocol, weak_cipher, header_score, header_grade, verdict_status, verdict_score
+    `SELECT id, domain, scanned_at, scanner_version, scoring_version, status, http_status, used_https, tls_protocol, weak_cipher, header_score, header_grade, verdict_status, verdict_score, content_score, content_grade, content_status, content_pages_scanned
      FROM snapshots
      WHERE domain = ?1`;
   const sql = before
@@ -529,6 +592,18 @@ export interface SnapshotSummary {
   headerGrade: string;
   verdictStatus: string;
   verdictScore: number;
+  contentScore: number | null;
+  contentGrade: string | null;
+  contentStatus: string | null;
+  contentPagesScanned: number | null;
+}
+
+function toNumberOrNull(v: unknown): number | null {
+  return v === null || v === undefined ? null : Number(v);
+}
+
+function toStringOrNull(v: unknown): string | null {
+  return v === null || v === undefined ? null : String(v);
 }
 
 function toSnapshotSummary(row: Record<string, unknown>): SnapshotSummary {
@@ -547,6 +622,10 @@ function toSnapshotSummary(row: Record<string, unknown>): SnapshotSummary {
     headerGrade: String(row.header_grade),
     verdictStatus: String(row.verdict_status),
     verdictScore: Number(row.verdict_score),
+    contentScore: toNumberOrNull(row.content_score),
+    contentGrade: toStringOrNull(row.content_grade),
+    contentStatus: toStringOrNull(row.content_status),
+    contentPagesScanned: toNumberOrNull(row.content_pages_scanned),
   };
 }
 
@@ -647,4 +726,30 @@ export function parseListLimit(raw: string | undefined, def = 10, max = 100): nu
   const n = Number(raw);
   if (!Number.isInteger(n) || n < 1) return def;
   return Math.min(n, max);
+}
+
+/**
+ * INTERNAL read (never exposed via the public API): the latest snapshot's raw
+ * JSON for a domain — used by the report/findings endpoints to render verdict,
+ * content findings, and evidence. The raw payload stays off the /history and
+ * /changes list surfaces (Section N.7), but server-side internal reads are fine.
+ */
+export async function getLatestSnapshotRaw(
+  db: D1Database,
+  domain: string
+): Promise<SecuritySnapshot | null> {
+  const row = await db
+    .prepare(
+      `SELECT raw_snapshot FROM snapshots
+       WHERE domain = ?1 AND status = 'complete'
+       ORDER BY scanned_at DESC LIMIT 1`
+    )
+    .bind(domain)
+    .first();
+  if (!row || typeof row.raw_snapshot !== "string") return null;
+  try {
+    return JSON.parse(row.raw_snapshot) as SecuritySnapshot;
+  } catch {
+    return null;
+  }
 }

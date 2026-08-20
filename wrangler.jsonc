@@ -17,7 +17,21 @@
     // Zero real monetary value. Still not the real Qzenta Virtual Wallet —
     // replace this once Cloudflare Wallets funding ships and Daniel decides
     // to go live, per /areas/cloudflare-wallets-agentic-commerce.md.
-    "X402_PAY_TO": "0x1866Fd80B1196AcC70A98a50917A8FD4639FE823"
+    "X402_PAY_TO": "0x1866Fd80B1196AcC70A98a50917A8FD4639FE823",
+    // Gate 4 P0 (20 Aug 2026): domains the scheduled (cron) scan monitors via
+    // the internal scan path. Pilot scope: the first paying pilot site
+    // (sikatrix.com whole site). The qzenta-sitehealth-fixture testbed is NOT
+    // monitored here: same-account worker->worker fetches to *.workers.dev
+    // return 404 at the edge (observed in the Workers runtime; direct fetch
+    // returns 200) — the fixture is exercised via staging/local verification.
+    // Set ALERT_WEBHOOK_URL (optional) to a webhook/email-provider endpoint to
+    // activate alert delivery.
+    "MONITOR_DOMAINS": "https://www.sikatrix.com/"
+  },
+  "triggers": {
+    // Pilot cadence: weekly, Monday 06:00 UTC. The Gate 4 verification window
+    // temporarily deploys a tighter schedule, then returns to this.
+    "crons": ["0 6 * * 1"]
   },
   "ratelimits": [
     {

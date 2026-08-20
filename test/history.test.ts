@@ -18,7 +18,7 @@ import {
   snapshotStatus,
   snapshotToRow,
 } from "../src/history";
-import app from "../src/index";
+import { app } from "../src/index";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -215,8 +215,12 @@ function makeEnv(fake: FakeD1, overrides: Record<string, unknown> = {}) {
 
 describe("version constants", () => {
   it("freezes the current scanner/scoring versions (bump = deliberate act)", () => {
-    expect(SCANNER_VERSION).toBe("snapshot-v1");
-    expect(SCORING_VERSION).toBe("scoring-v1");
+    // v3 (Gate 4, 20 Aug 2026): snapshotStatus semantics — a TLS identification
+    // probe failure no longer demotes snapshots to partial (platform limitation
+    // on CDN-fronted targets). This test is updated ONLY as part of a deliberate
+    // version bump — see src/versions.ts.
+    expect(SCANNER_VERSION).toBe("snapshot-v3");
+    expect(SCORING_VERSION).toBe("scoring-v2");
   });
 });
 
@@ -230,14 +234,17 @@ describe("snapshotStatus (Section F)", () => {
     expect(snapshotStatus(snap)).toBe("failed");
   });
 
-  it("marks a snapshot with a failed TLS probe as partial", () => {
-    const snap = makeSnapshot({ tls: { probeError: "no ServerHello received within timeout" } });
-    expect(snapshotStatus(snap)).toBe("partial");
-  });
-
   it("marks a snapshot with un-evaluated DNS as partial", () => {
     const snap = makeSnapshot({ dns: { note: "not evaluated", hasA: false } });
     expect(snapshotStatus(snap)).toBe("partial");
+  });
+
+  it("Gate 4: a TLS identification-probe failure on an HTTPS-valid target is COMPLETE, not partial", () => {
+    // The raw-socket probe cannot connect to Cloudflare-fronted targets in the
+    // Workers runtime ("Stream was cancelled"); the HTTPS fetch already proved
+    // TLS validity, so this must not disable change detection (v3 semantics).
+    const snap = makeSnapshot({ tls: { probeError: "Stream was cancelled.", protocol: "unknown (TLS probe did not resolve a version)" } });
+    expect(snapshotStatus(snap)).toBe("complete");
   });
 
   it("marks a clean observation complete even when the verdict is FAIL", () => {
@@ -257,6 +264,32 @@ describe("snapshotToRow", () => {
     expect(row.used_https).toBe(1);
     expect(row.verdict_status).toBe("PASS");
     expect(JSON.parse(row.raw_snapshot)).toEqual(snap);
+  });
+
+  it("stores NULL content columns when the snapshot has no content block (content not requested)", () => {
+    const row = snapshotToRow("example.com", makeSnapshot());
+    expect(row.content_score).toBeNull();
+    expect(row.content_grade).toBeNull();
+    expect(row.content_status).toBeNull();
+    expect(row.content_pages_scanned).toBeNull();
+  });
+
+  it("stores content summary columns when the snapshot carries a content block", () => {
+    const snap = makeSnapshot({
+      content: {
+        scope: { pagesScanned: 3, pagesPlanned: 3, sitemapFound: true, truncated: false },
+        facts: {},
+        findings: [],
+        score: 90,
+        grade: "A",
+        status: "PASS",
+      },
+    });
+    const row = snapshotToRow("example.com", snap);
+    expect(row.content_score).toBe(90);
+    expect(row.content_grade).toBe("A");
+    expect(row.content_status).toBe("PASS");
+    expect(row.content_pages_scanned).toBe(3);
   });
 });
 
@@ -335,6 +368,88 @@ describe("computeChange", () => {
     const r = computeChange(priorMeta, makeSnapshot(), currentMeta, makeSnapshot({ techObservations: { server: "cloudflare" } }));
     const f = r.changedFields.find((x) => x.field === "techObservations.server");
     expect(f?.materiality).toBe("informational");
+  });
+
+  // --- content dimension (v2) ---
+
+  function contentBlock(overrides: Record<string, unknown> = {}) {
+    return {
+      scope: { pagesScanned: 1, pagesPlanned: 1, sitemapFound: false, truncated: false },
+      facts: {
+        "za.uif.monthly_ceiling_zar": { claims: ["17712"], pages: ["/"], impact: "money" },
+      },
+      findings: [] as Array<Record<string, unknown>>,
+      score: 100,
+      grade: "A",
+      status: "PASS",
+      ...overrides,
+    };
+  }
+
+  it("treats adding the content dimension as a material change", () => {
+    const current = makeSnapshot({ content: contentBlock() });
+    const r = computeChange(priorMeta, makeSnapshot(), currentMeta, current);
+    const f = r.changedFields.find((x) => x.field === "content");
+    expect(f?.materiality).toBe("material");
+  });
+
+  it("flags a NEW critical money-figure finding as critical, and its resolution as material", () => {
+    const bad = makeSnapshot({
+      content: contentBlock({
+        score: 35,
+        grade: "D",
+        status: "FAIL",
+        findings: [
+          { type: "figure-mismatch", factKey: "za.uif.monthly_ceiling_zar", severity: "critical", confidence: "high", pagePath: "/", claim: "1476", groundTruth: "17712", supersededBy: null, message: "x" },
+        ],
+      }),
+    });
+    const appearing = computeChange(priorMeta, makeSnapshot({ content: contentBlock() }), currentMeta, bad);
+    const f = appearing.changedFields.find((x) => x.field === "content.critical.figure-mismatch:za.uif.monthly_ceiling_zar");
+    expect(f?.materiality).toBe("critical");
+    expect(f?.from).toBeNull();
+    expect(f?.to).toBe(true);
+
+    const resolving = computeChange(priorMeta, bad, currentMeta, makeSnapshot({ content: contentBlock() }));
+    const r = resolving.changedFields.find((x) => x.field === "content.critical.figure-mismatch:za.uif.monthly_ceiling_zar");
+    expect(r?.materiality).toBe("material");
+    expect(r?.from).toBe(true);
+    expect(r?.to).toBeNull();
+  });
+
+  it("flags a money-fact claim change as critical, and content.score delta >= 15 as material", () => {
+    const changed = makeSnapshot({
+      content: contentBlock({
+        facts: {
+          "za.uif.monthly_ceiling_zar": { claims: ["1476"], pages: ["/"], impact: "money" },
+        },
+        score: 35,
+        status: "FAIL",
+      }),
+    });
+    const r = computeChange(priorMeta, makeSnapshot({ content: contentBlock() }), currentMeta, changed);
+    const factChange = r.changedFields.find((x) => x.field === "content.facts.za.uif.monthly_ceiling_zar.claims");
+    expect(factChange?.materiality).toBe("critical");
+    expect(factChange?.from).toEqual(["17712"]);
+    expect(factChange?.to).toEqual(["1476"]);
+    const scoreChange = r.changedFields.find((x) => x.field === "content.score");
+    expect(scoreChange?.materiality).toBe("material");
+  });
+
+  it("flags a content status PASS->FAIL move as material", () => {
+    const r = computeChange(
+      priorMeta,
+      makeSnapshot({ content: contentBlock() }),
+      currentMeta,
+      makeSnapshot({ content: contentBlock({ score: 35, grade: "D", status: "FAIL" }) })
+    );
+    const f = r.changedFields.find((x) => x.field === "content.status");
+    expect(f?.materiality).toBe("material");
+  });
+
+  it("ignores content entirely when neither snapshot has it (byte-identical v1 behavior)", () => {
+    const r = computeChange(priorMeta, makeSnapshot(), currentMeta, makeSnapshot());
+    expect(r.changedFields.some((x) => x.field.startsWith("content"))).toBe(false);
   });
 
   it("computes scoreDelta as current minus prior verdict score", () => {
@@ -442,8 +557,9 @@ describe("D1 store + recordAndCompare", () => {
   it("anchors only on prior COMPLETE snapshots (AC6)", async () => {
     const fake = new FakeD1();
     const db = fake as unknown as D1Database;
-    // Seed a partial observation as the most recent prior — must be skipped.
-    await insertSnapshotRow(db, snapshotToRow("example.com", makeSnapshot({ timestamp: "2026-08-19T09:30:00.000Z", tls: { probeError: "timeout" } })));
+    // Seed a partial observation (DNS not evaluated — still partial under v3)
+    // as the most recent prior — must be skipped.
+    await insertSnapshotRow(db, snapshotToRow("example.com", makeSnapshot({ timestamp: "2026-08-19T09:30:00.000Z", dns: { note: "not evaluated", hasA: false } })));
     // And an older complete one that the comparator SHOULD anchor on.
     await insertSnapshotRow(db, snapshotToRow("example.com", makeSnapshot({ timestamp: "2026-08-19T08:00:00.000Z" })));
     const res = await recordAndCompare(db, makeSnapshot({ timestamp: "2026-08-19T10:00:00.000Z" }));

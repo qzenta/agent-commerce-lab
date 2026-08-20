@@ -1,0 +1,11 @@
+{
+  // Gate 3 verification fixture (20 Aug 2026) — deliberately contains WRONG
+  // compliance figures so the content-accuracy dimension can be independently
+  // verified: UIF ceiling stated as R1 476 (/ and /faq contradict), ROE deadline
+  // stated as 31 March (/about), VAT threshold correct (R2,300,000). Isolated
+  // workers.dev only; not part of the product, no D1, no payment.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "qzenta-sitehealth-fixture",
+  "main": "index.ts",
+  "compatibility_date": "2026-08-01"
+}
