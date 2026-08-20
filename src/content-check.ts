@@ -440,6 +440,15 @@ export interface FetchedPage {
   html: string;
   text: string;
   ok: boolean;
+  finalUrl: string;
+}
+
+/** Canonical dedupe key: protocol + lowercased host + normalized pathname
+ *  (search/hash dropped; trailing slash stripped except for the root path). */
+export function canonicalPageKey(url: string): string {
+  const u = new URL(url);
+  let path = u.pathname === "/" ? "/" : u.pathname.replace(/\/+$/, "");
+  return `${u.protocol}//${u.hostname.toLowerCase()}${path}`;
 }
 
 /** SSRF-guarded fetch with a bounded redirect loop and per-hop host validation. */
@@ -521,7 +530,7 @@ export async function runContentCheck(input: ContentCheckInput): Promise<Content
 
   const targetPath = finalOrigin.pathname === "/" ? "/" : finalOrigin.pathname;
   const pages: FetchedPage[] = [
-    { pagePath: targetPath, html: target.html, text: htmlToText(target.html), ok: target.error === null },
+    { pagePath: targetPath, html: target.html, text: htmlToText(target.html), ok: target.error === null, finalUrl: target.finalUrl },
   ];
 
   // 2. Discovery: sitemap, else internal links from the target HTML.
@@ -545,12 +554,24 @@ export async function runContentCheck(input: ContentCheckInput): Promise<Content
       const fetched = await fetchPageText(url, input.fetchFn);
       const u = new URL(fetched.finalUrl);
       const path = u.pathname === "/" ? "/" : u.pathname;
-      return { pagePath: path, html: fetched.html, text: htmlToText(fetched.html), ok: fetched.error === null };
+      return { pagePath: path, html: fetched.html, text: htmlToText(fetched.html), ok: fetched.error === null, finalUrl: fetched.finalUrl };
     })
   );
   pages.push(...rest);
 
-  const scanned = pages.filter((p) => p.ok);
+  // 3b. Dedupe by canonical final URL — the target page may also appear in the
+  // sitemap (or be re-discovered via internal links); scanning it twice would
+  // duplicate every finding for that page. First occurrence (the target) wins.
+  const seen = new Set<string>();
+  const deduped: FetchedPage[] = [];
+  for (const p of pages) {
+    const key = canonicalPageKey(p.finalUrl);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(p);
+  }
+
+  const scanned = deduped.filter((p) => p.ok);
   const pageContents: PageContent[] = scanned.map((p) => ({
     pagePath: p.pagePath,
     text: p.text,

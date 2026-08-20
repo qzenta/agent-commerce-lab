@@ -131,8 +131,12 @@ export const ZA_COMPLIANCE_PATTERNS: FactPattern[] = [
   { factKey: "za.vat.mandatory_threshold_zar", kind: "value", pattern: "R\\s*2[\\s,.]*300[\\s,.]*000\\b", priority: 20 },
 
   // --- za.uif.monthly_ceiling_zar (value 17712) ---
+  // Context pattern is ceiling-windowed, NOT bare "UIF": a page showing the
+  // UIF *contribution* (1% of the capped salary, e.g. R177.12) must not be
+  // misread as a claim about the ceiling itself (verified on sikatrix.com's
+  // tax calculator during Gate 3 — see GATE3-BUILD-EVIDENCE.md §2 finding #2).
   { factKey: "za.uif.monthly_ceiling_zar", kind: "keyword", pattern: "\\b(?:UIF|unemployment insurance)\\b", priority: 1 },
-  { factKey: "za.uif.monthly_ceiling_zar", kind: "context", pattern: "(?:UIF|unemployment insurance)[^.]{0,140}?R\\s*(\\d[\\d\\s.,]*(?:m|million|k|thousand)?)", priority: 5 },
+  { factKey: "za.uif.monthly_ceiling_zar", kind: "context", pattern: "(?:UIF|unemployment insurance)[^.]{0,120}?(?:ceiling|cap(?:ped)?|maximum|monthly limit)[^.]{0,80}?R\\s*(\\d[\\d\\s.,]*(?:m|million|k|thousand)?)", priority: 5 },
   { factKey: "za.uif.monthly_ceiling_zar", kind: "value", pattern: "R\\s*17\\s*[.,]?\\s*712\\b", priority: 10 },
   { factKey: "za.uif.monthly_ceiling_zar", kind: "value", pattern: "R\\s*17[\\s,.]*712\\b", priority: 20 },
 

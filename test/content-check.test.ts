@@ -100,6 +100,21 @@ describe("extractClaimsFromText", () => {
     expect(claims).toHaveLength(0);
   });
 
+  it("regression (Gate 3): does NOT treat a UIF contribution figure (R177.12) as a ceiling claim", () => {
+    // sikatrix.com's tax calculator shows the 1% contribution (R177.12 =
+    // 1% x R17,712) next to the word UIF — that is NOT a statement of the
+    // ceiling and must not produce a figure-mismatch.
+    const claims = extractClaimsFromText("UIF: R177.12 per month is deducted from your salary.", "/", [UIF], UIF_PATTERNS);
+    expect(claims).toHaveLength(0);
+  });
+
+  it("still extracts ceiling-context claims (capped/cap/ceiling windows)", () => {
+    const capped = extractClaimsFromText("UIF is capped at R1 476 per month.", "/", [UIF], UIF_PATTERNS);
+    expect(capped.map((c) => c.normalized)).toContain("1476");
+    const ceiling = extractClaimsFromText("The UIF monthly remuneration ceiling is R17,712.", "/", [UIF], UIF_PATTERNS);
+    expect(ceiling.map((c) => c.normalized)).toContain("17712");
+  });
+
   it("is deterministic across runs", () => {
     const text = "VAT registration is compulsory above R2.3m since April 2026.";
     const VAT = ZA_COMPLIANCE_FACTS.find((f) => f.factKey === "za.vat.mandatory_threshold_zar")!;
@@ -323,8 +338,8 @@ describe("runContentCheck", () => {
       asOf: "2026-08-20",
     });
     expect(result.scope.sitemapFound).toBe(true);
-    expect(result.scope.pagesScanned).toBe(4); // target + /calculator + /faq (+ "/" from sitemap)
-    expect(result.scope.pagesPlanned).toBe(4);
+    expect(result.scope.pagesScanned).toBe(3); // target "/" deduped against the sitemap's "/" (Gate 3 fix)
+    expect(result.scope.pagesPlanned).toBe(4); // target + 3 sitemap URLs (the "/" duplicate was fetched, then deduped)
     expect(result.scope.truncated).toBe(false);
     expect(result.findings.some((f) => f.type === "figure-mismatch" && f.severity === "critical")).toBe(true);
     // D4 cap through the full pipeline.
