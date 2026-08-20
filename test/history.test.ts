@@ -18,7 +18,7 @@ import {
   snapshotStatus,
   snapshotToRow,
 } from "../src/history";
-import app from "../src/index";
+import { app } from "../src/index";
 
 // ---------------------------------------------------------------------------
 // Helpers

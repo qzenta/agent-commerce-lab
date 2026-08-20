@@ -719,3 +719,29 @@ export function parseListLimit(raw: string | undefined, def = 10, max = 100): nu
   if (!Number.isInteger(n) || n < 1) return def;
   return Math.min(n, max);
 }
+
+/**
+ * INTERNAL read (never exposed via the public API): the latest snapshot's raw
+ * JSON for a domain — used by the report/findings endpoints to render verdict,
+ * content findings, and evidence. The raw payload stays off the /history and
+ * /changes list surfaces (Section N.7), but server-side internal reads are fine.
+ */
+export async function getLatestSnapshotRaw(
+  db: D1Database,
+  domain: string
+): Promise<SecuritySnapshot | null> {
+  const row = await db
+    .prepare(
+      `SELECT raw_snapshot FROM snapshots
+       WHERE domain = ?1 AND status = 'complete'
+       ORDER BY scanned_at DESC LIMIT 1`
+    )
+    .bind(domain)
+    .first();
+  if (!row || typeof row.raw_snapshot !== "string") return null;
+  try {
+    return JSON.parse(row.raw_snapshot) as SecuritySnapshot;
+  } catch {
+    return null;
+  }
+}

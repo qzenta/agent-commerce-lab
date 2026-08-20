@@ -11,7 +11,11 @@ import {
   listSnapshotHistory,
   parseListLimit,
   runSnapshotWithHistory,
+  getLatestSnapshotRaw,
+  domainKey,
 } from "./history";
+import { buildDigest } from "./report";
+import { runScheduledScans, parseMonitorDomains } from "./scheduled";
 // Single source of truth for the spec lives in docs/agent-commerce/ (human +
 // agent-facing docs); imported here so the served copy can't drift from it.
 import openApiSpec from "../docs/agent-commerce/openapi.json";
@@ -22,6 +26,10 @@ type Bindings = {
   DISCOVERY_RATE_LIMITER: RateLimit;
   SNAPSHOT_RATE_LIMITER: RateLimit;
   HISTORY_DB: D1Database;
+  /** Comma-separated http(s) URLs the scheduled (cron) scan monitors (P0). */
+  MONITOR_DOMAINS?: string;
+  /** Optional alert delivery webhook (email provider endpoint etc.). */
+  ALERT_WEBHOOK_URL?: string;
 };
 
 // Variables: per-request context stashed by middlewares for later
@@ -31,7 +39,7 @@ type AppEnv = {
   Variables: { batchDomains?: string[]; batchContent?: boolean };
 };
 
-const app = new Hono<AppEnv>();
+export const app = new Hono<AppEnv>();
 
 // Structured request logging — one JSON line per request via console.log,
 // which Cloudflare captures in `wrangler tail` / Logpush without needing a
@@ -76,6 +84,10 @@ app.use("/snapshot/*", rateLimitByIp((env) => env.SNAPSHOT_RATE_LIMITER));
 // otherwise be scraped at volume, so they reuse the discovery bucket.
 app.use("/history/*", rateLimitByIp((env) => env.DISCOVERY_RATE_LIMITER));
 app.use("/changes/*", rateLimitByIp((env) => env.DISCOVERY_RATE_LIMITER));
+// Pilot ops endpoints (P0): alerts, report digest, findings review.
+app.use("/alerts/*", rateLimitByIp((env) => env.DISCOVERY_RATE_LIMITER));
+app.use("/report/*", rateLimitByIp((env) => env.DISCOVERY_RATE_LIMITER));
+app.use("/findings/*", rateLimitByIp((env) => env.DISCOVERY_RATE_LIMITER));
 
 // Unpaid: service description for agent discovery. Lets an agent (or a
 // human) see what this endpoint does and what it costs before paying.
@@ -263,4 +275,185 @@ app.post("/snapshot/batch", async (c) => {
   );
 });
 
-export default app;
+// ---------------------------------------------------------------------------
+// Pilot ops endpoints (Gate 4 P0) — free, discovery-rate-limited.
+// ---------------------------------------------------------------------------
+
+// GET /alerts?domain=<host> — recorded alerts for a domain, newest first.
+app.get("/alerts", async (c) => {
+  const domain = c.req.query("domain");
+  if (!domain) {
+    return c.json({ error: "missing required query param: domain" }, 400);
+  }
+  try {
+    const limit = parseListLimit(c.req.query("limit"), 20, 100);
+    const res = await c.env.HISTORY_DB.prepare(
+      `SELECT id, domain, detected_at, change_id, materiality, verdict_moved, summary, delivered_at, delivery_error
+       FROM alerts
+       WHERE domain = ?1
+       ORDER BY detected_at DESC LIMIT ?2`
+    )
+      .bind(domain, limit)
+      .all();
+    return c.json({ domain, alerts: res.results });
+  } catch (err) {
+    console.log(JSON.stringify({ event: "alerts_read_failed", domain, error: err instanceof Error ? err.message : String(err) }));
+    return c.json({ error: "alerts storage unavailable" }, 500);
+  }
+});
+
+// GET /report?domain=<host> — Markdown digest (monthly digest / evidence export).
+app.get("/report", async (c) => {
+  const domain = c.req.query("domain");
+  if (!domain) {
+    return c.json({ error: "missing required query param: domain" }, 400);
+  }
+  try {
+    const key = domainKey(domain);
+    const history = await listSnapshotHistory(c.env.HISTORY_DB, key, 100);
+    const changes = await listChangeHistory(c.env.HISTORY_DB, key, 20);
+    const raw = await getLatestSnapshotRaw(c.env.HISTORY_DB, key);
+    const latest = history.items[0] ?? null;
+    const content =
+      raw?.content === undefined
+        ? null
+        : {
+            score: raw.content.score,
+            grade: raw.content.grade,
+            status: raw.content.status,
+            scope: raw.content.scope,
+            findings: raw.content.findings,
+          };
+    const digest = buildDigest({
+      domain: key,
+      generatedAt: new Date().toISOString(),
+      latest,
+      content,
+      changes: changes.items,
+      historyCount: history.items.length,
+    });
+    return new Response(digest, { headers: { "content-type": "text/markdown; charset=utf-8" } });
+  } catch (err) {
+    console.log(JSON.stringify({ event: "report_failed", domain, error: err instanceof Error ? err.message : String(err) }));
+    return c.json({ error: "report unavailable" }, 500);
+  }
+});
+
+// GET /findings?domain=<host> — content findings from the latest snapshot,
+// annotated with review status (FP-rate scaffold).
+app.get("/findings", async (c) => {
+  const domain = c.req.query("domain");
+  if (!domain) {
+    return c.json({ error: "missing required query param: domain" }, 400);
+  }
+  try {
+    const key = domainKey(domain);
+    const raw = await getLatestSnapshotRaw(c.env.HISTORY_DB, key);
+    if (!raw?.content) {
+      return c.json({ domain: key, findings: [], note: "no content scan recorded for this domain yet" });
+    }
+    const reviewRes = await c.env.HISTORY_DB.prepare(
+      `SELECT finding_key, status, ruled_by, ruled_at, notes FROM findings_review WHERE domain = ?1`
+    )
+      .bind(key)
+      .all();
+    const rulings = new Map(
+      (reviewRes.results as Array<{ finding_key: string; status: string; ruled_by: string | null; ruled_at: string | null; notes: string | null }>).map((r) => [
+        r.finding_key,
+        r,
+      ])
+    );
+    const findings = raw.content.findings.map((f) => {
+      const fk = `${f.type}:${f.factKey}`;
+      const ruling = rulings.get(fk);
+      return {
+        ...f,
+        findingKey: fk,
+        review: ruling ?? { status: "pending", ruled_by: null, ruled_at: null, notes: null },
+      };
+    });
+    return c.json({ domain: key, scannedAt: raw.timestamp, findings });
+  } catch (err) {
+    console.log(JSON.stringify({ event: "findings_read_failed", domain, error: err instanceof Error ? err.message : String(err) }));
+    return c.json({ error: "findings unavailable" }, 500);
+  }
+});
+
+// POST /findings/review — record a human ruling on a finding (FP-rate scaffold).
+// Rulings are human-only (Daniel or a designated reviewer); DSH never rules its
+// own findings. Upsert is SELECT-then-UPDATE-or-INSERT (D1-safe).
+app.post("/findings/review", async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "request body must be valid JSON" }, 400);
+  }
+  const b = body as { domain?: unknown; findingKey?: unknown; status?: unknown; notes?: unknown };
+  if (typeof b.domain !== "string" || typeof b.findingKey !== "string") {
+    return c.json({ error: "domain and findingKey are required strings" }, 400);
+  }
+  if (b.status !== "confirmed" && b.status !== "false-positive" && b.status !== "pending") {
+    return c.json({ error: "status must be confirmed | false-positive | pending" }, 400);
+  }
+  const notes = typeof b.notes === "string" ? b.notes : null;
+  const key = domainKey(b.domain);
+  const now = new Date().toISOString();
+  const existing = await c.env.HISTORY_DB.prepare(
+    `SELECT id FROM findings_review WHERE domain = ?1 AND finding_key = ?2`
+  )
+    .bind(key, b.findingKey)
+    .first();
+  try {
+    if (existing) {
+      await c.env.HISTORY_DB.prepare(
+        `UPDATE findings_review SET status = ?3, ruled_by = ?4, ruled_at = ?5, notes = ?6 WHERE domain = ?1 AND finding_key = ?2`
+      )
+        .bind(key, b.findingKey, b.status, "reviewer", now, notes)
+        .run();
+    } else {
+      await c.env.HISTORY_DB.prepare(
+        `INSERT INTO findings_review (domain, finding_key, status, ruled_by, ruled_at, notes)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
+      )
+        .bind(key, b.findingKey, b.status, "reviewer", now, notes)
+        .run();
+    }
+  } catch (err) {
+    console.log(JSON.stringify({ event: "findings_review_write_failed", domain: key, error: err instanceof Error ? err.message : String(err) }));
+    return c.json({ error: "review storage unavailable" }, 500);
+  }
+  return c.json({ ok: true, domain: key, findingKey: b.findingKey, status: b.status, ruledAt: now });
+});
+
+// ---------------------------------------------------------------------------
+// Scheduled handler (Gate 4 P0): cron-invoked scans of MONITOR_DOMAINS via the
+// same pipeline the paid endpoint runs — the "internal scan path" (no HTTP
+// payment gate; the customer's invoice/EFT authorises the service).
+// ---------------------------------------------------------------------------
+export async function scheduled(
+  _event: unknown,
+  env: Bindings,
+  ctx: ExecutionContext
+): Promise<void> {
+  const domains = parseMonitorDomains(env.MONITOR_DOMAINS);
+  if (domains.length === 0) {
+    console.log(JSON.stringify({ event: "scheduled_scan_skipped", reason: "MONITOR_DOMAINS unset" }));
+    return;
+  }
+  ctx.waitUntil(
+    runScheduledScans(env.HISTORY_DB, {
+      domains,
+      webhookUrl: env.ALERT_WEBHOOK_URL,
+    }).then((results) => {
+      for (const r of results) {
+        console.log(JSON.stringify({ event: "scheduled_scan_done", domain: r.domain, ok: r.ok, error: r.error ?? null, changeComparable: r.change?.comparable ?? null, alert: r.alert ? { materiality: r.alert.materiality, deliveredAt: r.alert.delivered_at } : null }));
+      }
+    })
+  );
+}
+
+// Workers entry: fetch (Hono) + scheduled (cron). Named `app` stays exported so
+// the test suite can call app.request(...) directly.
+export default { fetch: app.fetch, scheduled };
+

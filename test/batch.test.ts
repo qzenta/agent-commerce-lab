@@ -8,7 +8,7 @@ import {
   BATCH_CONCURRENCY,
   BATCH_DEADLINE_MS,
 } from "../src/batch";
-import app from "../src/index";
+import { app } from "../src/index";
 
 // ---------------------------------------------------------------------------
 // Helpers
