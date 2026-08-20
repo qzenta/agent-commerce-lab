@@ -1,9 +1,11 @@
 # Gate 3 — Staging Evidence: Isolated Staging + Independent Verification
 
 **SiteHealth Passport v2 — P0, per Gate 0/1 approvals + Gate 3 staging approval (20 Aug 2026)**
-**Status:** STAGING COMPLETE on the isolated staging URL; one verification item requires the
-owner's input (paid-endpoint exercise — see §6). **Not a Gate 4 production deployment.** No
-custom domain, no DNS, no production D1, no mainnet/wallet/pricing action.
+**Status:** **GATE 3 CLOSED (20 Aug 2026)** — the deployed-bundle evidence (fixture test,
+sikatrix live re-probe, determinism, AC7/build-vs-prod) is accepted as sufficient verification
+for this gate under **Option C**; the live x402-gated endpoint was not exercised through a
+completed payment, and the gate is closed on that basis. **Not a Gate 4 production deployment.**
+No custom domain, no DNS, no production D1, no mainnet/wallet/pricing action.
 **PR:** https://github.com/qzenta/agent-commerce-lab/pull/3 (branch `dsh/v2-content-accuracy`).
 
 ---
@@ -174,9 +176,36 @@ a snapshot + (on second run) a change record to the staging D1.
 
 ## 8. Decisions — status
 
-1. **§6 payment path: RESOLVED (20 Aug 2026) — option A.** Daniel runs the two paid scans
-   against the staging URL with his own wallet and shares the responses; DSH reconciles them
-   against the §4/§5 local findings. Commands in §6.
+1. **§6 payment path: RESOLVED — closed under option C (20 Aug 2026).** A payer-wallet ETH
+   faucet path was attempted and exhausted (Alchemy/QuickNode/Chainlink require 0.001 ETH on
+   Ethereum mainnet; Bware Labs site down) and the merchant wallet holds no base-sepolia ETH,
+   so no completed x402 payment was possible. The gate is closed accepting the deployed-bundle
+   evidence; the unverified surface is specifically the HTTP payment-gate handshake (thin
+   x402-hono layer), not the content-accuracy logic.
 2. **§5 R177 judgment: RESOLVED — keep flagging** (no new fact, no scanner change).
-3. **Gate 3 → Gate 4 decision: OPEN** — pending the paid-scan reconciliation (§6 option A) and
-   your reproduction pass (source diff via PR #3, live HTTP probes against the staging URL).
+3. **Gate 3 → Gate 4: CLOSED.** Next: Gate 4 (production) remains a **separate decision**; per
+   Gate 0, the §10 content-dimension pricing decision is required before Gate 4, along with the
+   production-scope items in §9 below.
+
+---
+
+## 9. Gate 4 pre-flight items (NOT performed; each requires explicit approval)
+
+Gate 4 (production) is a separate decision and is NOT authorized by anything in this document.
+When it is requested, the scope will be:
+
+1. **§10 content-dimension pricing** — reserved since Gate 0 ("separate decision before Gate 4,
+   not resolved by this approval"). Needs a price/package for `content=true` scans before the
+   production endpoint advertises them.
+2. **Production D1 (`qzenta-sitehealth-history`, the live Cycle-2 store):** apply migrations
+   `0002`/`0003` (idempotency already proven on the isolated staging D1) and load the approved
+   ground-truth seed (5 facts / 15 patterns) — a **production data change**, human-approved only.
+3. **Production deploy of the v2 worker** to the existing `qzenta-security-snapshot` worker
+   (serving `sitehealth.qzenta.com`) from the merged PR branch — touches the custom domain's
+   serving worker.
+4. **Post-deploy verification on production:** served OpenAPI vs runtime, `content=true` scan of
+   a fixture/compliance site through the live endpoint, `/history` + `/changes` reads against the
+   production D1.
+5. **Standing follow-ups tracked:** the paid-handshake verification (whenever a payer wallet
+   exists), pre-existing OpenAPI drift cleanup (already fixed in the branch), facilitator review
+   before real funds (pre-mainnet gate, unchanged).
