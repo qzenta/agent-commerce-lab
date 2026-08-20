@@ -1,0 +1,294 @@
+{
+  "base": "https://sitehealth.qzenta.com",
+  "domain": "www.sikatrix.com",
+  "history": {
+    "status": 200,
+    "count": 3,
+    "rows": [
+      {
+        "snapshotId": 3,
+        "scannedAt": "2026-08-20T13:42:51.310Z",
+        "scannerVersion": "snapshot-v3",
+        "scoringVersion": "scoring-v2",
+        "status": "complete",
+        "httpStatus": 200,
+        "headerScore": 80,
+        "verdictStatus": "FAIL",
+        "verdictScore": 5,
+        "contentScore": 5,
+        "contentStatus": "FAIL",
+        "contentPagesScanned": 9
+      },
+      {
+        "snapshotId": 2,
+        "scannedAt": "2026-08-20T13:40:51.313Z",
+        "scannerVersion": "snapshot-v3",
+        "scoringVersion": "scoring-v2",
+        "status": "complete",
+        "httpStatus": 200,
+        "headerScore": 80,
+        "verdictStatus": "FAIL",
+        "verdictScore": 5,
+        "contentScore": 5,
+        "contentStatus": "FAIL",
+        "contentPagesScanned": 9
+      },
+      {
+        "snapshotId": 1,
+        "scannedAt": "2026-08-20T13:38:51.457Z",
+        "scannerVersion": "snapshot-v3",
+        "scoringVersion": "scoring-v2",
+        "status": "complete",
+        "httpStatus": 200,
+        "headerScore": 80,
+        "verdictStatus": "FAIL",
+        "verdictScore": 5,
+        "contentScore": 5,
+        "contentStatus": "FAIL",
+        "contentPagesScanned": 9
+      }
+    ]
+  },
+  "changes": {
+    "status": 200,
+    "count": 2,
+    "rows": [
+      {
+        "changeId": 2,
+        "domain": "www.sikatrix.com",
+        "detectedAt": "2026-08-20T13:42:52.156Z",
+        "comparable": true,
+        "reason": "same scoring model",
+        "materiality": "informational",
+        "changedFields": [],
+        "scoreDelta": 0,
+        "verdictMoved": false,
+        "from": {
+          "snapshotId": 2,
+          "scannedAt": "2026-08-20T13:40:51.313Z",
+          "scannerVersion": "snapshot-v3",
+          "scoringVersion": "scoring-v2"
+        },
+        "to": {
+          "snapshotId": 3,
+          "scannedAt": "2026-08-20T13:42:51.310Z",
+          "scannerVersion": "snapshot-v3",
+          "scoringVersion": "scoring-v2"
+        }
+      },
+      {
+        "changeId": 1,
+        "domain": "www.sikatrix.com",
+        "detectedAt": "2026-08-20T13:40:52.074Z",
+        "comparable": true,
+        "reason": "same scoring model",
+        "materiality": "informational",
+        "changedFields": [],
+        "scoreDelta": 0,
+        "verdictMoved": false,
+        "from": {
+          "snapshotId": 1,
+          "scannedAt": "2026-08-20T13:38:51.457Z",
+          "scannerVersion": "snapshot-v3",
+          "scoringVersion": "scoring-v2"
+        },
+        "to": {
+          "snapshotId": 2,
+          "scannedAt": "2026-08-20T13:40:51.313Z",
+          "scannerVersion": "snapshot-v3",
+          "scoringVersion": "scoring-v2"
+        }
+      }
+    ]
+  },
+  "alerts": {
+    "status": 200,
+    "count": 0,
+    "rows": []
+  },
+  "report": {
+    "status": 200,
+    "markdown": "# SiteHealth Passport — www.sikatrix.com\n_Generated 2026-08-20T13:44:45.616Z UTC_\n\n## Current state\n- Verdict: **FAIL** (5/100)\n- Content accuracy: **FAIL** (5/100, grade F, 9 page(s) scanned)\n- Security headers: grade B (80/100)\n- Snapshots recorded: 3\n- Latest scan: 2026-08-20T13:42:51.310Z\n\n## Content findings (latest scan)\n- [critical] cross-page-contradiction | za.uif.monthly_ceiling_zar | claim 177 / 17712 | Pages of this site state different values for \"UIF monthly remuneration ceiling\": [177, 17712] (approved value 17712).\n- [informational] absent-required-figure | za.uif.monthly_ceiling_zar | page / | claim — | \"UIF monthly remuneration ceiling\" topic appears on / but no figure for it was found there.\n- [informational] absent-required-figure | za.uif.monthly_ceiling_zar | page /services | claim — | \"UIF monthly remuneration ceiling\" topic appears on /services but no figure for it was found there.\n- [informational] absent-required-figure | za.uif.monthly_ceiling_zar | page /pricing | claim — | \"UIF monthly remuneration ceiling\" topic appears on /pricing but no figure for it was found there.\n- [critical] figure-mismatch | za.uif.monthly_ceiling_zar | page /tools/tax-calculator | claim 177 | \"UIF monthly remuneration ceiling\" stated as 177 on /tools/tax-calculator; approved value is 17712 (effective 2026-08-20).\n- [informational] absent-required-figure | za.emp501.reconciliation_end | page / | claim — | \"EMP501 annual reconciliation window end\" topic appears on / but no"
+  },
+  "findings": {
+    "status": 200,
+    "count": 9,
+    "rows": [
+      {
+        "type": "cross-page-contradiction",
+        "factKey": "za.uif.monthly_ceiling_zar",
+        "severity": "critical",
+        "confidence": "high",
+        "pagePath": null,
+        "claim": "177 / 17712",
+        "groundTruth": "17712",
+        "supersededBy": null,
+        "message": "Pages of this site state different values for \"UIF monthly remuneration ceiling\": [177, 17712] (approved value 17712).",
+        "findingKey": "cross-page-contradiction:za.uif.monthly_ceiling_zar",
+        "review": {
+          "status": "pending",
+          "ruled_by": null,
+          "ruled_at": null,
+          "notes": null
+        }
+      },
+      {
+        "type": "absent-required-figure",
+        "factKey": "za.uif.monthly_ceiling_zar",
+        "severity": "informational",
+        "confidence": "low",
+        "pagePath": "/",
+        "claim": null,
+        "groundTruth": "17712",
+        "supersededBy": null,
+        "message": "\"UIF monthly remuneration ceiling\" topic appears on / but no figure for it was found there.",
+        "findingKey": "absent-required-figure:za.uif.monthly_ceiling_zar",
+        "review": {
+          "status": "pending",
+          "ruled_by": null,
+          "ruled_at": null,
+          "notes": null
+        }
+      },
+      {
+        "type": "absent-required-figure",
+        "factKey": "za.uif.monthly_ceiling_zar",
+        "severity": "informational",
+        "confidence": "low",
+        "pagePath": "/services",
+        "claim": null,
+        "groundTruth": "17712",
+        "supersededBy": null,
+        "message": "\"UIF monthly remuneration ceiling\" topic appears on /services but no figure for it was found there.",
+        "findingKey": "absent-required-figure:za.uif.monthly_ceiling_zar",
+        "review": {
+          "status": "pending",
+          "ruled_by": null,
+          "ruled_at": null,
+          "notes": null
+        }
+      },
+      {
+        "type": "absent-required-figure",
+        "factKey": "za.uif.monthly_ceiling_zar",
+        "severity": "informational",
+        "confidence": "low",
+        "pagePath": "/pricing",
+        "claim": null,
+        "groundTruth": "17712",
+        "supersededBy": null,
+        "message": "\"UIF monthly remuneration ceiling\" topic appears on /pricing but no figure for it was found there.",
+        "findingKey": "absent-required-figure:za.uif.monthly_ceiling_zar",
+        "review": {
+          "status": "pending",
+          "ruled_by": null,
+          "ruled_at": null,
+          "notes": null
+        }
+      },
+      {
+        "type": "figure-mismatch",
+        "factKey": "za.uif.monthly_ceiling_zar",
+        "severity": "critical",
+        "confidence": "high",
+        "pagePath": "/tools/tax-calculator",
+        "claim": "177",
+        "groundTruth": "17712",
+        "supersededBy": null,
+        "message": "\"UIF monthly remuneration ceiling\" stated as 177 on /tools/tax-calculator; approved value is 17712 (effective 2026-08-20).",
+        "findingKey": "figure-mismatch:za.uif.monthly_ceiling_zar",
+        "review": {
+          "status": "pending",
+          "ruled_by": null,
+          "ruled_at": null,
+          "notes": null
+        }
+      },
+      {
+        "type": "absent-required-figure",
+        "factKey": "za.emp501.reconciliation_end",
+        "severity": "informational",
+        "confidence": "low",
+        "pagePath": "/",
+        "claim": null,
+        "groundTruth": "05-31",
+        "supersededBy": null,
+        "message": "\"EMP501 annual reconciliation window end\" topic appears on / but no figure for it was found there.",
+        "findingKey": "absent-required-figure:za.emp501.reconciliation_end",
+        "review": {
+          "status": "pending",
+          "ruled_by": null,
+          "ruled_at": null,
+          "notes": null
+        }
+      },
+      {
+        "type": "absent-required-figure",
+        "factKey": "za.emp501.reconciliation_end",
+        "severity": "informational",
+        "confidence": "low",
+        "pagePath": "/about",
+        "claim": null,
+        "groundTruth": "05-31",
+        "supersededBy": null,
+        "message": "\"EMP501 annual reconciliation window end\" topic appears on /about but no figure for it was found there.",
+        "findingKey": "absent-required-figure:za.emp501.reconciliation_end",
+        "review": {
+          "status": "pending",
+          "ruled_by": null,
+          "ruled_at": null,
+          "notes": null
+        }
+      },
+      {
+        "type": "absent-required-figure",
+        "factKey": "za.emp501.reconciliation_end",
+        "severity": "informational",
+        "confidence": "low",
+        "pagePath": "/pricing",
+        "claim": null,
+        "groundTruth": "05-31",
+        "supersededBy": null,
+        "message": "\"EMP501 annual reconciliation window end\" topic appears on /pricing but no figure for it was found there.",
+        "findingKey": "absent-required-figure:za.emp501.reconciliation_end",
+        "review": {
+          "status": "pending",
+          "ruled_by": null,
+          "ruled_at": null,
+          "notes": null
+        }
+      },
+      {
+        "type": "absent-required-figure",
+        "factKey": "za.emp501.reconciliation_end",
+        "severity": "informational",
+        "confidence": "low",
+        "pagePath": "/tools/tax-calculator",
+        "claim": null,
+        "groundTruth": "05-31",
+        "supersededBy": null,
+        "message": "\"EMP501 annual reconciliation window end\" topic appears on /tools/tax-calculator but no figure for it was found there.",
+        "findingKey": "absent-required-figure:za.emp501.reconciliation_end",
+        "review": {
+          "status": "pending",
+          "ruled_by": null,
+          "ruled_at": null,
+          "notes": null
+        }
+      }
+    ]
+  },
+  "determinism": {
+    "consecutiveIdentical": true,
+    "contentScores": [
+      5,
+      5,
+      5
+    ],
+    "contentStatuses": [
+      "FAIL",
+      "FAIL",
+      "FAIL"
+    ]
+  }
+}
