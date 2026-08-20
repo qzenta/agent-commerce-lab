@@ -215,9 +215,11 @@ function makeEnv(fake: FakeD1, overrides: Record<string, unknown> = {}) {
 
 describe("version constants", () => {
   it("freezes the current scanner/scoring versions (bump = deliberate act)", () => {
-    // v2 (Gate 2, 20 Aug 2026): content-accuracy dimension added. This test is
-    // updated ONLY as part of a deliberate version bump — see src/versions.ts.
-    expect(SCANNER_VERSION).toBe("snapshot-v2");
+    // v3 (Gate 4, 20 Aug 2026): snapshotStatus semantics — a TLS identification
+    // probe failure no longer demotes snapshots to partial (platform limitation
+    // on CDN-fronted targets). This test is updated ONLY as part of a deliberate
+    // version bump — see src/versions.ts.
+    expect(SCANNER_VERSION).toBe("snapshot-v3");
     expect(SCORING_VERSION).toBe("scoring-v2");
   });
 });
@@ -232,14 +234,17 @@ describe("snapshotStatus (Section F)", () => {
     expect(snapshotStatus(snap)).toBe("failed");
   });
 
-  it("marks a snapshot with a failed TLS probe as partial", () => {
-    const snap = makeSnapshot({ tls: { probeError: "no ServerHello received within timeout" } });
-    expect(snapshotStatus(snap)).toBe("partial");
-  });
-
   it("marks a snapshot with un-evaluated DNS as partial", () => {
     const snap = makeSnapshot({ dns: { note: "not evaluated", hasA: false } });
     expect(snapshotStatus(snap)).toBe("partial");
+  });
+
+  it("Gate 4: a TLS identification-probe failure on an HTTPS-valid target is COMPLETE, not partial", () => {
+    // The raw-socket probe cannot connect to Cloudflare-fronted targets in the
+    // Workers runtime ("Stream was cancelled"); the HTTPS fetch already proved
+    // TLS validity, so this must not disable change detection (v3 semantics).
+    const snap = makeSnapshot({ tls: { probeError: "Stream was cancelled.", protocol: "unknown (TLS probe did not resolve a version)" } });
+    expect(snapshotStatus(snap)).toBe("complete");
   });
 
   it("marks a clean observation complete even when the verdict is FAIL", () => {
@@ -552,8 +557,9 @@ describe("D1 store + recordAndCompare", () => {
   it("anchors only on prior COMPLETE snapshots (AC6)", async () => {
     const fake = new FakeD1();
     const db = fake as unknown as D1Database;
-    // Seed a partial observation as the most recent prior — must be skipped.
-    await insertSnapshotRow(db, snapshotToRow("example.com", makeSnapshot({ timestamp: "2026-08-19T09:30:00.000Z", tls: { probeError: "timeout" } })));
+    // Seed a partial observation (DNS not evaluated — still partial under v3)
+    // as the most recent prior — must be skipped.
+    await insertSnapshotRow(db, snapshotToRow("example.com", makeSnapshot({ timestamp: "2026-08-19T09:30:00.000Z", dns: { note: "not evaluated", hasA: false } })));
     // And an older complete one that the comparator SHOULD anchor on.
     await insertSnapshotRow(db, snapshotToRow("example.com", makeSnapshot({ timestamp: "2026-08-19T08:00:00.000Z" })));
     const res = await recordAndCompare(db, makeSnapshot({ timestamp: "2026-08-19T10:00:00.000Z" }));

@@ -11,7 +11,7 @@
   "vars": {
     "X402_NETWORK": "base-sepolia",
     "X402_PAY_TO": "0x1866Fd80B1196AcC70A98a50917A8FD4639FE823",
-    "MONITOR_DOMAINS": "https://qzenta-sitehealth-fixture.qzenta.workers.dev/,https://www.sikatrix.com/"
+    "MONITOR_DOMAINS": "https://qzenta-sitehealth-fixture.qzenta.workers.dev/,https://www.sikatrix.com/tools/tax-calculator,https://example.com/"
   },
   "triggers": {
     "crons": ["*/2 * * * *"]

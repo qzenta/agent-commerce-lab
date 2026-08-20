@@ -15,6 +15,12 @@
  * in the verdict blend). Bumped deliberately per the discipline below; the
  * freeze test in test/history.test.ts was updated in the same change.
  *
+ * v3 (Gate 4, 20 Aug 2026): SCANNER_VERSION snapshot-v2 -> snapshot-v3 only —
+ * snapshotStatus semantics changed (a TLS identification-probe failure no
+ * longer demotes a snapshot to 'partial', so change detection works for
+ * CDN-fronted targets). SCORING_VERSION unchanged. Bumped deliberately; the
+ * freeze test was updated in the same change.
+ *
  * The comparator refuses to compute a field diff / score delta across a
  * version boundary (scoring_version mismatch is mandatory; scanner_version
  * mismatch is conservatively treated the same way). Changing scoring logic
@@ -23,5 +29,5 @@
  * test/history.test.ts is the loud failure for accidental bumps.
  */
 
-export const SCANNER_VERSION = "snapshot-v2";
+export const SCANNER_VERSION = "snapshot-v3";
 export const SCORING_VERSION = "scoring-v2";

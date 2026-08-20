@@ -115,15 +115,23 @@ export function domainKey(target: string): string {
 }
 
 /**
- * Observation-completeness status (Section F). `failed` = target unreachable
- * at all (top-level http.error set). `partial` = the HTTP request succeeded
- * but a subsystem (TLS probe, DNS) did not complete cleanly. `complete`
- * otherwise. This is about observation quality, NOT health: a healthy-looking
- * site with verdict FAIL is still `complete`.
+ * Observation-completeness status (Section F, amended Gate 4 20 Aug 2026).
+ * `failed` = target unreachable at all (top-level http.error set). `partial` =
+ * a subsystem did not complete cleanly. `complete` otherwise. This is about
+ * observation quality, NOT health: a healthy-looking site with verdict FAIL is
+ * still `complete`.
+ *
+ * Gate 4 amendment: a TLS *identification* probe failure is no longer a
+ * `partial` trigger. In the real Workers runtime the raw-socket probe cannot
+ * connect to Cloudflare-owned IP space ("Stream was cancelled" on
+ * Cloudflare-fronted targets — observed in production; example.com probes
+ * cleanly), and the HTTPS fetch has already proven the target speaks TLS. The
+ * probe error stays honestly reported (tls.probeError + a findings note); it
+ * just must not permanently disable change detection for CDN-fronted targets.
  */
 export function snapshotStatus(snapshot: SecuritySnapshot): SnapshotStatus {
   if (snapshot.http.error !== null) return "failed";
-  if (snapshot.tls.probeError !== null || snapshot.dns.note === "not evaluated") return "partial";
+  if (snapshot.dns.note === "not evaluated") return "partial";
   return "complete";
 }
 
