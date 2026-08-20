@@ -230,6 +230,35 @@
                         "cmsGuess": { "type": ["string", "null"] }
                       }
                     },
+                    "headerScore": {
+                      "type": "object",
+                      "description": "Security-header misconfiguration score (0-100) with A-F grade and severity-ranked issues.",
+                      "properties": {
+                        "score": { "type": "integer" },
+                        "grade": { "type": "string" },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "header": { "type": "string" },
+                              "severity": { "type": "string", "enum": ["high", "medium", "low"] },
+                              "message": { "type": "string" }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "verdict": {
+                      "type": "object",
+                      "description": "LLM-consumable pass/fail verdict; content-aware when content=true (a critical money or compliance-deadline finding caps the blended score at 35 -> FAIL, per Gate 1 ruling D4).",
+                      "properties": {
+                        "status": { "type": "string", "enum": ["PASS", "WARN", "FAIL"] },
+                        "score": { "type": "integer" },
+                        "summary": { "type": "string" },
+                        "topIssues": { "type": "array", "items": { "type": "string" } }
+                      }
+                    },
                     "findings": { "type": "array", "items": { "type": "string" } },
                     "content": {
                       "type": ["object", "null"],
@@ -504,6 +533,35 @@
                                   "poweredBy": { "type": ["string", "null"] },
                                   "poweredByCloudflare": { "type": "boolean" },
                                   "cmsGuess": { "type": ["string", "null"] }
+                                }
+                              },
+                              "headerScore": {
+                                "type": "object",
+                                "properties": {
+                                  "score": { "type": "integer" },
+                                  "grade": { "type": "string" },
+                                  "issues": { "type": "array", "items": { "type": "object", "properties": { "header": { "type": "string" }, "severity": { "type": "string" }, "message": { "type": "string" } } } }
+                                }
+                              },
+                              "verdict": {
+                                "type": "object",
+                                "properties": {
+                                  "status": { "type": "string", "enum": ["PASS", "WARN", "FAIL"] },
+                                  "score": { "type": "integer" },
+                                  "summary": { "type": "string" },
+                                  "topIssues": { "type": "array", "items": { "type": "string" } }
+                                }
+                              },
+                              "content": {
+                                "type": ["object", "null"],
+                                "description": "Present only when the batch request included content:true. Same shape as GET /snapshot/run's content block.",
+                                "properties": {
+                                  "scope": { "type": "object", "properties": { "pagesScanned": { "type": "integer" }, "pagesPlanned": { "type": "integer" }, "sitemapFound": { "type": "boolean" }, "truncated": { "type": "boolean" } } },
+                                  "facts": { "type": "object" },
+                                  "findings": { "type": "array", "items": { "type": "object" } },
+                                  "score": { "type": "integer" },
+                                  "grade": { "type": "string" },
+                                  "status": { "type": "string" }
                                 }
                               },
                               "findings": { "type": "array", "items": { "type": "string" } }

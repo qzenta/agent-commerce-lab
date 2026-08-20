@@ -1,0 +1,37 @@
+{
+  // ISOLATED STAGING CONFIG (Gate 3, 20 Aug 2026) — do NOT use for production.
+  // Deliberately NOT the production worker name, NOT the production D1
+  // (qzenta-sitehealth-history), and there is no custom domain/routes block:
+  // deployments land on a fresh *.workers.dev subdomain only.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "qzenta-sitehealth-staging",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "X402_NETWORK": "base-sepolia",
+    "X402_PAY_TO": "0x1866Fd80B1196AcC70A98a50917A8FD4639FE823"
+  },
+  "ratelimits": [
+    {
+      "name": "DISCOVERY_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 30, "period": 60 }
+    },
+    {
+      "name": "SNAPSHOT_RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
+  "d1_databases": [
+    {
+      // Staging-only D1 — created 20 Aug 2026 via `wrangler d1 create
+      // qzenta-sitehealth-staging`. Same binding name (HISTORY_DB) so the
+      // Worker source is identical; only the database id differs from prod.
+      "binding": "HISTORY_DB",
+      "database_name": "qzenta-sitehealth-staging",
+      "database_id": "1c973f63-1c0f-426a-9ff0-7e045ae484ab"
+    }
+  ]
+}

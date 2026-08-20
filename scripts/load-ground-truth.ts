@@ -15,6 +15,11 @@
 // connects to D1 itself — the operator's wrangler invocation is the write path,
 // which keeps the Worker (and this repo's src/) structurally write-free.
 //
+// NOTE: no BEGIN/COMMIT wrapper is emitted — Cloudflare D1's `wrangler d1 execute`
+// rejects SQL-level transactions ("use the state.storage.transaction() APIs
+// instead"). Each statement is atomic on its own, and the ON CONFLICT clauses
+// make repeat application a no-op (same values) or a metadata refresh.
+//
 // Idempotency: re-running emits the same statements; the ON CONFLICT clauses make
 // repeat application a no-op (same values) or a metadata refresh (source_ref etc.).
 
@@ -45,10 +50,8 @@ function patternSql(p) {
 }
 
 const lines = [
-  "BEGIN;",
   ...ZA_COMPLIANCE_FACTS.map(factSql),
   ...ZA_COMPLIANCE_PATTERNS.map(patternSql),
-  "COMMIT;",
 ];
 
 process.stdout.write(lines.join("\n") + "\n");
