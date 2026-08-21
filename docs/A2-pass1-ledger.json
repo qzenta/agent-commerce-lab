@@ -1,0 +1,40 @@
+[
+  {
+    "txId": "a2-pass-1-approved-ceilings-real-3-00-quote-",
+    "agentId": "dsh-a2-harness",
+    "serviceId": "vat-api",
+    "request": "tax",
+    "quotedPriceCents": 300,
+    "policyLimitCents": 25,
+    "policyDecision": "rejected-per-tx",
+    "paymentAttempt": null,
+    "nonce": null,
+    "network": "simulation",
+    "settlementStatus": null,
+    "serviceResult": null,
+    "retryCount": 0,
+    "finalOutcome": null,
+    "timestamp": "2026-08-21T06:57:41.150Z",
+    "errorOrDispute": "policy: rejected-per-tx",
+    "entryId": 1
+  },
+  {
+    "txId": "a2-pass-1-approved-ceilings-real-3-00-quote-",
+    "agentId": "dsh-a2-harness",
+    "serviceId": "vat-api",
+    "request": "tax",
+    "quotedPriceCents": null,
+    "policyLimitCents": null,
+    "policyDecision": null,
+    "paymentAttempt": null,
+    "nonce": null,
+    "network": "simulation",
+    "settlementStatus": null,
+    "serviceResult": null,
+    "retryCount": null,
+    "finalOutcome": "aborted-policy",
+    "timestamp": "2026-08-21T06:57:41.150Z",
+    "errorOrDispute": "policy decision: rejected-per-tx",
+    "entryId": 2
+  }
+]

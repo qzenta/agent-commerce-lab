@@ -1,0 +1,23 @@
+=== A2 live challenge: status 402; maxAmountRequired 3000000 (=$ 3.00) ===
+
+--- PASS-1 approved ceilings (real $3.00 quote) ---
+result: aborted-policy | selected: vat-api | paymentsSettled: 0 | paymentAttempts: 0 | nonces: []
+notes: ["selected service vat-api for task \"tax\" (https://vat-api.qzenta.workers.dev)","policy rejected: rejected-per-tx (price 300c)"]
+exchange errors: []
+
+--- PASS-2 harness override (unfunded payer exercise) ---
+A2 pay attempt 1 — POST https://sikatrix-vat-api-staging.qzenta.workers.dev/calculate
+A2 pay attempt 1 — challenge: {"scheme":"exact","network":"base-sepolia","maxAmountRequired":"3000000","resource":"https://sikatrix-vat-api-staging.qzenta.workers.dev/calculate","description":"","mimeType":"application/json","payTo":"0x01886487312c75
+A2 pay attempt 1 — payment header created (facilitator submission attempted)
+A2 pay attempt 1 — retry status 402: {"error":"invalid_exact_evm_insufficient_balance","accepts":[{"scheme":"exact","network":"base-sepolia","maxAmountRequired":"3000000","resource":"https://sikatrix-vat-api-staging.qzenta.workers.dev/ca
+A2 pay attempt 2 — POST https://sikatrix-vat-api-staging.qzenta.workers.dev/calculate
+A2 pay attempt 2 — challenge: {"scheme":"exact","network":"base-sepolia","maxAmountRequired":"3000000","resource":"https://sikatrix-vat-api-staging.qzenta.workers.dev/calculate","description":"","mimeType":"application/json","payTo":"0x01886487312c75
+A2 pay attempt 2 — payment header created (facilitator submission attempted)
+A2 pay attempt 2 — retry status 402: {"error":"invalid_exact_evm_insufficient_balance","accepts":[{"scheme":"exact","network":"base-sepolia","maxAmountRequired":"3000000","resource":"https://sikatrix-vat-api-staging.qzenta.workers.dev/ca
+A2 pay attempt 3 — POST https://sikatrix-vat-api-staging.qzenta.workers.dev/calculate
+A2 pay attempt 3 — challenge: {"scheme":"exact","network":"base-sepolia","maxAmountRequired":"3000000","resource":"https://sikatrix-vat-api-staging.qzenta.workers.dev/calculate","description":"","mimeType":"application/json","payTo":"0x01886487312c75
+A2 pay attempt 3 — payment header created (facilitator submission attempted)
+A2 pay attempt 3 — retry status 402: {"error":"invalid_exact_evm_insufficient_balance","accepts":[{"scheme":"exact","network":"base-sepolia","maxAmountRequired":"3000000","resource":"https://sikatrix-vat-api-staging.qzenta.workers.dev/ca
+result: escalated | selected: vat-api | paymentsSettled: 0 | paymentAttempts: 3 | nonces: ["a2-pass-2-harness-override-unfunded-payer-exercise-:pay:1","a2-pass-2-harness-override-unfunded-payer-exercise-:pay:2","a2-pass-2-harness-override-unfunded-payer-exercise-:pay:3"]
+notes: ["selected service vat-api for task \"tax\" (https://vat-api.qzenta.workers.dev)","price 300c accepted (≤ per-tx 400c, per-service 25c)","pay attempt 1: failed (nonce a2-pass-2-harness-override-unfunded-payer-exercise-:pay:1)","payment failed on attempt 1","pay attempt 2: failed (nonce a2-pass-2-harness-override-unfunded-payer-exercise-:pay:2)","payment failed on attempt 2","pay attempt 3: failed (nonce a2-pass-2-harness-override-unfunded-payer-exercise-:pay:3)","payment failed on attempt 3"]
+exchange errors: []
